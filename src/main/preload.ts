@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 import type { SimplesProviderName } from "../core/simples/simples-provider.factory";
-import type { ProcessCsvSummary } from "./types";
+import type { LookupProgress, ProcessCsvSummary } from "./types";
 
 type PickCsvResult = {
   filePath: string;
@@ -39,6 +39,23 @@ contextBridge.exposeInMainWorld("appBridge", {
       defaultName,
       content,
     });
+  },
+  autoSaveCsvFile: (sourceFilePath: string, content: string): Promise<string> => {
+    return ipcRenderer.invoke("csv:auto-save-output-file", {
+      sourceFilePath,
+      content,
+    });
+  },
+  onLookupProgress: (callback: (progress: LookupProgress) => void): (() => void) => {
+    const listener = (_event: unknown, progress: LookupProgress) => {
+      callback(progress);
+    };
+
+    ipcRenderer.on("csv:lookup-progress", listener);
+
+    return () => {
+      ipcRenderer.off("csv:lookup-progress", listener);
+    };
   },
   getDefaults: (): Promise<AppDefaults> => {
     return ipcRenderer.invoke("app:get-defaults");

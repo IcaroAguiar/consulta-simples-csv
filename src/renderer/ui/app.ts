@@ -1,5 +1,5 @@
 import type { SimplesProviderName } from "../../core/simples/simples-provider.factory";
-import type { ProcessCsvSummary } from "../../main/types";
+import type { LookupProgress, ProcessCsvSummary } from "../../main/types";
 
 type PickCsvResult = {
   filePath: string;
@@ -20,6 +20,8 @@ type AppBridge = {
     cnpjColumn?: string;
   }): Promise<ProcessCsvResult>;
   saveCsvFile(defaultName: string, content: string): Promise<string | null>;
+  autoSaveCsvFile(sourceFilePath: string, content: string): Promise<string>;
+  onLookupProgress(callback: (progress: LookupProgress) => void): () => void;
   getDefaults(): Promise<{ provider: SimplesProviderName }>;
 };
 
@@ -31,6 +33,7 @@ declare global {
 
 type UiState = {
   fileName: string | null;
+  filePath: string | null;
   content: string | null;
   provider: SimplesProviderName;
   cnpjColumn: string;
@@ -39,10 +42,12 @@ type UiState = {
   outputCsv: string | null;
   summary: ProcessCsvSummary | null;
   savedPath: string | null;
+  progress: LookupProgress | null;
 };
 
 const initialState: UiState = {
   fileName: null,
+  filePath: null,
   content: null,
   provider: "mock",
   cnpjColumn: "",
@@ -51,6 +56,7 @@ const initialState: UiState = {
   outputCsv: null,
   summary: null,
   savedPath: null,
+  progress: null,
 };
 
 export function mountApp(root: HTMLDivElement | null): void {
@@ -86,8 +92,16 @@ export function mountApp(root: HTMLDivElement | null): void {
   };
 
   void initializeDefaults();
+  const unsubscribeProgress = window.appBridge.onLookupProgress((progress) => {
+    state.progress = progress;
+    if (state.status === "processing") {
+      state.message = `Consultando ${progress.completedUniqueLookups} de ${progress.totalUniqueLookups} CNPJs únicos...`;
+      syncUi();
+    }
+  });
   wireEvents();
   syncUi();
+  window.addEventListener("beforeunload", unsubscribeProgress);
 
   async function initializeDefaults(): Promise<void> {
     try {
@@ -150,10 +164,12 @@ export function mountApp(root: HTMLDivElement | null): void {
 
   function applyFile(result: PickCsvResult): void {
     state.fileName = result.fileName;
+    state.filePath = result.filePath;
     state.content = result.content;
     state.outputCsv = null;
     state.summary = null;
     state.savedPath = null;
+    state.progress = null;
     state.status = "idle";
     state.message = `Arquivo carregado: ${result.fileName}`;
     syncUi();
@@ -169,6 +185,7 @@ export function mountApp(root: HTMLDivElement | null): void {
 
     state.status = "processing";
     state.message = "Processando CSV...";
+    state.progress = null;
     syncUi();
 
     try {
@@ -182,8 +199,13 @@ export function mountApp(root: HTMLDivElement | null): void {
 
       state.outputCsv = result.outputCsv;
       state.summary = result.summary;
+      state.savedPath = state.filePath
+        ? await window.appBridge.autoSaveCsvFile(state.filePath, result.outputCsv)
+        : null;
       state.status = "success";
-      state.message = "Processamento concluido.";
+      state.message = state.savedPath
+        ? "Processamento concluido e CSV salvo automaticamente."
+        : "Processamento concluido.";
       syncUi();
     } catch (error) {
       state.status = "error";
@@ -380,6 +402,10 @@ function renderStatusLabel(status: UiState["status"]): string {
 }
 
 function renderStatusText(state: UiState): string {
+  if (state.status === "processing" && state.progress) {
+    return `${state.progress.completedUniqueLookups}/${state.progress.totalUniqueLookups} consultas únicas. ETA ${formatDuration(state.progress.estimatedRemainingMs)}.`;
+  }
+
   if (state.status === "success" && state.summary) {
     return `${state.summary.totalLinhas} linhas, ${state.summary.totalCnpjsUnicosConsultados} consultas únicas.`;
   }
@@ -425,4 +451,21 @@ function escapeHtml(value: string): string {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function formatDuration(durationInMs: number): string {
+  const totalSeconds = Math.max(0, Math.round(durationInMs / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+
+  return `${seconds}s`;
 }

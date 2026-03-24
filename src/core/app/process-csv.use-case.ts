@@ -3,21 +3,13 @@ import { validateCnpj } from "../cnpj/validate-cnpj";
 import { writeCsv } from "../export/csv-writer";
 import { readCsv } from "../ingestion/csv-reader";
 import { detectCnpjColumn } from "../ingestion/detect-cnpj-column";
+import type { LookupProgress, ProcessCsvSummary } from "../../main/types";
 import type { SimplesLookupPort } from "../simples/simples-lookup.port";
 import type { SimplesLookupResult } from "../simples/simples-lookup.types";
 
 type ProcessCsvOptions = {
   cnpjColumn?: string;
-};
-
-type ProcessCsvSummary = {
-  totalLinhas: number;
-  totalCnpjsEncontrados: number;
-  totalCnpjsValidos: number;
-  totalCnpjsUnicosConsultados: number;
-  totalOptantesSimples: number;
-  totalNaoOptantesSimples: number;
-  totalErros: number;
+  onLookupProgress?: (progress: LookupProgress) => void;
 };
 
 type ProcessCsvResult = {
@@ -41,6 +33,8 @@ export async function processCsv(
   }
 
   const lookupCache = new Map<string, SimplesLookupResult>();
+  const uniqueValidCnpjs = collectUniqueValidCnpjs(rows, cnpjColumn);
+  let completedUniqueLookups = 0;
   let totalCnpjsEncontrados = 0;
   let totalCnpjsValidos = 0;
   const outputColumns = [
@@ -87,6 +81,16 @@ export async function processCsv(
       } else {
         lookupResult = await provider.lookup(cnpjNormalizado);
         lookupCache.set(cnpjNormalizado, lookupResult);
+        completedUniqueLookups += 1;
+        options.onLookupProgress?.({
+          completedUniqueLookups,
+          totalUniqueLookups: uniqueValidCnpjs.length,
+          currentCnpj: cnpjNormalizado,
+          estimatedRemainingMs: estimateRemainingMs(
+            completedUniqueLookups,
+            uniqueValidCnpjs.length,
+          ),
+        });
       }
     }
 
@@ -134,4 +138,31 @@ function toCsvValue(value: boolean | null): string {
   }
 
   return String(value);
+}
+
+function collectUniqueValidCnpjs(
+  rows: Array<Record<string, string>>,
+  cnpjColumn: string,
+): string[] {
+  const uniqueValid = new Set<string>();
+
+  for (const row of rows) {
+    const cnpjOriginal = row[cnpjColumn] ?? "";
+    const cnpjNormalizado = normalizeCnpj(cnpjOriginal);
+
+    if (validateCnpj(cnpjNormalizado)) {
+      uniqueValid.add(cnpjNormalizado);
+    }
+  }
+
+  return Array.from(uniqueValid);
+}
+
+function estimateRemainingMs(
+  completedUniqueLookups: number,
+  totalUniqueLookups: number,
+): number {
+  const remainingLookups = Math.max(0, totalUniqueLookups - completedUniqueLookups);
+
+  return remainingLookups * 12_000;
 }
