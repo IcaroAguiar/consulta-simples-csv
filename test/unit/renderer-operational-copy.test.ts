@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildDedupeLabel,
+  countdownRemainingMs,
   formatDuration,
   formatProviderMode,
   previewAutoSavePath,
@@ -32,5 +33,10 @@ describe("renderer operational copy", () => {
     expect(
       previewAutoSavePath("/Users/icaroaguiar/Downloads/clientes.csv"),
     ).toBe("/Users/icaroaguiar/Downloads/clientes-processado.csv");
+  });
+
+  it("counts ETA down in real time without going negative", () => {
+    expect(countdownRemainingMs(96_000, 4_000)).toBe(92_000);
+    expect(countdownRemainingMs(3_000, 9_000)).toBe(0);
   });
 });

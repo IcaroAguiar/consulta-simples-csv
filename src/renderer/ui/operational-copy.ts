@@ -49,3 +49,10 @@ export function formatProgressLine(progress: LookupProgress | null): string {
 
   return `${progress.completedUniqueLookups}/${progress.totalUniqueLookups} consultas únicas • ETA ${formatDuration(progress.estimatedRemainingMs)} • atual ${progress.currentCnpj}`;
 }
+
+export function countdownRemainingMs(
+  baseRemainingMs: number,
+  elapsedSinceLastProgressMs: number,
+): number {
+  return Math.max(0, baseRemainingMs - elapsedSinceLastProgressMs);
+}

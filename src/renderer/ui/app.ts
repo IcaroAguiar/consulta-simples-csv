@@ -3,6 +3,7 @@ import type { LookupProgress, ProcessCsvSummary } from "../../main/types";
 import { attemptAutoSave } from "./auto-save";
 import {
   buildDedupeLabel,
+  countdownRemainingMs,
   formatProgressLine,
   formatProviderMode,
   previewAutoSavePath,
@@ -50,6 +51,8 @@ type UiState = {
   summary: ProcessCsvSummary | null;
   savedPath: string | null;
   progress: LookupProgress | null;
+  progressObservedAt: number | null;
+  now: number;
 };
 
 const initialState: UiState = {
@@ -64,6 +67,8 @@ const initialState: UiState = {
   summary: null,
   savedPath: null,
   progress: null,
+  progressObservedAt: null,
+  now: Date.now(),
 };
 
 export function mountApp(root: HTMLDivElement | null): void {
@@ -113,14 +118,25 @@ export function mountApp(root: HTMLDivElement | null): void {
   void initializeDefaults();
   const unsubscribeProgress = window.appBridge.onLookupProgress((progress) => {
     state.progress = progress;
+    state.progressObservedAt = Date.now();
+    state.now = Date.now();
     if (state.status === "processing") {
       state.message = `Consultando ${progress.completedUniqueLookups} de ${progress.totalUniqueLookups} CNPJs únicos...`;
       syncUi();
     }
   });
+  const progressTicker = window.setInterval(() => {
+    if (state.status === "processing" && state.progress) {
+      state.now = Date.now();
+      syncUi();
+    }
+  }, 1000);
   wireEvents();
   syncUi();
-  window.addEventListener("beforeunload", unsubscribeProgress);
+  window.addEventListener("beforeunload", () => {
+    unsubscribeProgress();
+    window.clearInterval(progressTicker);
+  });
 
   async function initializeDefaults(): Promise<void> {
     try {
@@ -189,6 +205,8 @@ export function mountApp(root: HTMLDivElement | null): void {
     state.summary = null;
     state.savedPath = null;
     state.progress = null;
+    state.progressObservedAt = null;
+    state.now = Date.now();
     state.status = "idle";
     state.message = `Arquivo carregado: ${result.fileName}`;
     syncUi();
@@ -205,6 +223,8 @@ export function mountApp(root: HTMLDivElement | null): void {
     state.status = "processing";
     state.message = "Processando CSV...";
     state.progress = null;
+    state.progressObservedAt = null;
+    state.now = Date.now();
     syncUi();
 
     try {
@@ -525,7 +545,10 @@ function renderStatusLabel(status: UiState["status"]): string {
 
 function renderStatusText(state: UiState): string {
   if (state.status === "processing" && state.progress) {
-    return formatProgressLine(state.progress);
+    return formatProgressLine({
+      ...state.progress,
+      estimatedRemainingMs: getLiveRemainingMs(state),
+    });
   }
 
   if (state.status === "success" && state.summary) {
@@ -577,4 +600,15 @@ function escapeHtml(value: string): string {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function getLiveRemainingMs(state: UiState): number {
+  if (!state.progress || state.progressObservedAt === null) {
+    return 0;
+  }
+
+  return countdownRemainingMs(
+    state.progress.estimatedRemainingMs,
+    state.now - state.progressObservedAt,
+  );
 }
