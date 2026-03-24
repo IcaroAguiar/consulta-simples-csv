@@ -9,11 +9,11 @@
   "scripts": {
     "dev": "concurrently -k \"pnpm dev:renderer\" \"pnpm dev:main\" \"pnpm dev:electron\"",
     "dev:renderer": "vite",
-    "dev:main": "tsup src/main/main.ts src/main/preload.ts --format cjs --out-dir dist-electron --watch",
+    "dev:main": "tsup src/main/main.ts src/main/preload.ts --format cjs --out-dir dist-electron --external electron --watch",
     "dev:electron": "wait-on tcp:5173 file:dist-electron/main.cjs && electronmon .",
     "build": "pnpm build:renderer && pnpm build:main",
     "build:renderer": "vite build",
-    "build:main": "tsup src/main/main.ts src/main/preload.ts --format cjs --out-dir dist-electron",
+    "build:main": "tsup src/main/main.ts src/main/preload.ts --format cjs --out-dir dist-electron --external electron",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "test": "vitest run",
@@ -21,6 +21,7 @@
     "dist:mac": "pnpm build && electron-builder --mac dmg",
     "dist:win": "pnpm build && electron-builder --win nsis",
     "dist:dir": "pnpm build && electron-builder --dir",
+    "repair:electron": "pnpm rebuild electron esbuild",
     "start": "electron ."
   },
   "dependencies": {

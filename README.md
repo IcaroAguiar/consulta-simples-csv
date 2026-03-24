@@ -29,6 +29,18 @@ pnpm dist:mac
 pnpm dist:win
 ```
 
+## Troubleshooting
+
+Se o Electron reclamar que falhou a instalação, rode:
+
+```bash
+pnpm repair:electron
+pnpm build
+pnpm start
+```
+
+Com `pnpm`, o problema normalmente não é apagar `node_modules/electron`, e sim refazer o `postinstall` do Electron e do `esbuild`.
+
 ## Fluxo GSD local
 
 Este repositório nasce compatível com GSD, mas a pasta `.ai/` é operacional/local e fica fora do Git.
@@ -40,4 +52,3 @@ python3 -m gsd_lite.cli prepare --runtime codex --repo "$PWD" --task "<objetivo 
 ```
 
 Neste ambiente, o módulo `gsd_lite` não estava disponível no Python no momento do bootstrap inicial, então a estrutura foi preparada manualmente.
-
