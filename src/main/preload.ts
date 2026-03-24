@@ -40,13 +40,18 @@ contextBridge.exposeInMainWorld("appBridge", {
       content,
     });
   },
-  autoSaveCsvFile: (sourceFilePath: string, content: string): Promise<string> => {
+  autoSaveCsvFile: (
+    sourceFilePath: string,
+    content: string,
+  ): Promise<string> => {
     return ipcRenderer.invoke("csv:auto-save-output-file", {
       sourceFilePath,
       content,
     });
   },
-  onLookupProgress: (callback: (progress: LookupProgress) => void): (() => void) => {
+  onLookupProgress: (
+    callback: (progress: LookupProgress) => void,
+  ): (() => void) => {
     const listener = (_event: unknown, progress: LookupProgress) => {
       callback(progress);
     };

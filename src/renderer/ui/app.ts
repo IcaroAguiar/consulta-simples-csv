@@ -1,5 +1,12 @@
 import type { SimplesProviderName } from "../../core/simples/simples-provider.factory";
 import type { LookupProgress, ProcessCsvSummary } from "../../main/types";
+import { attemptAutoSave } from "./auto-save";
+import {
+  buildDedupeLabel,
+  formatProgressLine,
+  formatProviderMode,
+  previewAutoSavePath,
+} from "./operational-copy";
 
 type PickCsvResult = {
   filePath: string;
@@ -89,6 +96,18 @@ export function mountApp(root: HTMLDivElement | null): void {
     outputStatus: root.querySelector<HTMLElement>(
       '[data-slot="output-status"]',
     ),
+    providerMode: root.querySelector<HTMLElement>(
+      '[data-slot="provider-mode"]',
+    ),
+    autoSavePreview: root.querySelector<HTMLElement>(
+      '[data-slot="auto-save-preview"]',
+    ),
+    dedupeLabel: root.querySelector<HTMLElement>('[data-slot="dedupe-label"]'),
+    progressLine: root.querySelector<HTMLElement>(
+      '[data-slot="progress-line"]',
+    ),
+    progressBar: root.querySelector<HTMLElement>('[data-slot="progress-bar"]'),
+    currentCnpj: root.querySelector<HTMLElement>('[data-slot="current-cnpj"]'),
   };
 
   void initializeDefaults();
@@ -199,13 +218,19 @@ export function mountApp(root: HTMLDivElement | null): void {
 
       state.outputCsv = result.outputCsv;
       state.summary = result.summary;
-      state.savedPath = state.filePath
-        ? await window.appBridge.autoSaveCsvFile(state.filePath, result.outputCsv)
-        : null;
+      const autoSaveResult = await attemptAutoSave(
+        window.appBridge.autoSaveCsvFile,
+        state.filePath,
+        result.outputCsv,
+      );
+
+      state.savedPath = autoSaveResult.savedPath;
       state.status = "success";
-      state.message = state.savedPath
-        ? "Processamento concluido e CSV salvo automaticamente."
-        : "Processamento concluido.";
+      state.message =
+        autoSaveResult.warningMessage ??
+        (state.savedPath
+          ? "Processamento concluido e CSV salvo automaticamente."
+          : "Processamento concluido.");
       syncUi();
     } catch (error) {
       state.status = "error";
@@ -270,6 +295,51 @@ export function mountApp(root: HTMLDivElement | null): void {
       refs.outputStatus.textContent = renderStatusText(state);
     }
 
+    if (refs.providerMode) {
+      refs.providerMode.textContent = formatProviderMode(state.provider);
+    }
+
+    if (refs.autoSavePreview) {
+      refs.autoSavePreview.textContent = state.savedPath
+        ? state.savedPath
+        : state.filePath
+          ? previewAutoSavePath(state.filePath)
+          : "Nenhum caminho ainda";
+    }
+
+    if (refs.dedupeLabel) {
+      refs.dedupeLabel.textContent = state.summary
+        ? buildDedupeLabel(state.summary)
+        : "A deduplicacao aparece depois da primeira execucao.";
+    }
+
+    if (refs.progressLine) {
+      refs.progressLine.textContent = formatProgressLine(state.progress);
+    }
+
+    if (refs.progressBar) {
+      const progressPercent = state.progress
+        ? Math.min(
+            100,
+            Math.max(
+              0,
+              (state.progress.completedUniqueLookups /
+                Math.max(1, state.progress.totalUniqueLookups)) *
+                100,
+            ),
+          )
+        : state.status === "success"
+          ? 100
+          : 0;
+
+      refs.progressBar.style.width = `${progressPercent}%`;
+    }
+
+    if (refs.currentCnpj) {
+      refs.currentCnpj.textContent =
+        state.progress?.currentCnpj ?? "Aguardando primeiro CNPJ";
+    }
+
     if (refs.summary) {
       refs.summary.innerHTML = renderSummary(state.summary);
     }
@@ -288,19 +358,66 @@ export function mountApp(root: HTMLDivElement | null): void {
 }
 
 function renderShell(state: UiState): string {
+  const autoSavePreview = state.savedPath
+    ? state.savedPath
+    : state.filePath
+      ? previewAutoSavePath(state.filePath)
+      : "Nenhum caminho ainda";
+
   return `
     <main class="app-shell">
       <section class="hero">
         <div class="hero__copy">
           <p class="eyebrow">Consulta Simples CSV</p>
-          <h1>Enriquecer CSV localmente com Simples Nacional e SIMEI.</h1>
+          <h1>Fila operacional para 3 horas de consultas deduplicadas.</h1>
           <p class="lede">
-            Escolha um CSV, valide a coluna de CNPJ e gere o arquivo processado sem instalar nada extra.
+            O app processa apenas CNPJs únicos válidos, mantém o operador informado com ETA e grava a saída automaticamente ao lado do CSV original.
           </p>
         </div>
         <div class="hero__status" aria-live="polite">
-          <span class="status-pill">${renderStatusLabel(state.status)}</span>
-          <span data-slot="output-status">${renderStatusText(state)}</span>
+          <div class="status-chip-row">
+            <span class="status-pill">${renderStatusLabel(state.status)}</span>
+            <span class="status-pill status-pill--muted" data-slot="provider-mode">${formatProviderMode(
+              state.provider,
+            )}</span>
+          </div>
+          <div class="status-stack">
+            <strong data-slot="current-cnpj">${
+              state.progress?.currentCnpj ?? "Aguardando primeiro CNPJ"
+            }</strong>
+            <span data-slot="output-status">${renderStatusText(state)}</span>
+            <span class="status-copy" data-slot="auto-save-preview">${escapeHtml(
+              autoSavePreview,
+            )}</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="ops-strip" aria-label="Resumo operacional">
+        <div class="ops-tile">
+          <span class="ops-label">Dedupe</span>
+          <strong data-slot="dedupe-label">${
+            state.summary
+              ? buildDedupeLabel(state.summary)
+              : "A deduplicacao aparece depois da primeira execucao."
+          }</strong>
+        </div>
+
+        <div class="ops-progress">
+          <div class="ops-progress__header">
+            <span class="ops-label">Progresso e ETA</span>
+            <strong data-slot="progress-line">${formatProgressLine(
+              state.progress,
+            )}</strong>
+          </div>
+          <div class="ops-progress__track" aria-hidden="true">
+            <span data-slot="progress-bar"></span>
+          </div>
+        </div>
+
+        <div class="ops-tile">
+          <span class="ops-label">Auto-save</span>
+          <strong data-slot="auto-save-preview">${escapeHtml(autoSavePreview)}</strong>
         </div>
       </section>
 
@@ -349,7 +466,7 @@ function renderShell(state: UiState): string {
               Processar CSV
             </button>
             <button class="button button--secondary" data-action="save-file" type="button">
-              Salvar resultado
+              Salvar cópia manual
             </button>
           </div>
 
@@ -370,6 +487,11 @@ function renderShell(state: UiState): string {
           <p class="note">
             O provider cnpja-open respeita o limite público do serviço e deve ser usado para validação, não para lote pesado.
           </p>
+          <ul class="runbook">
+            <li>Use <strong>mock</strong> para validar o layout e o arquivo final sem rede.</li>
+            <li>Troque para <strong>cnpja-open</strong> quando quiser medir o fluxo real.</li>
+            <li>O caminho de auto-save aparece acima; o salvamento manual é apenas contingência.</li>
+          </ul>
           <p class="note">${
             state.savedPath
               ? `Último salvamento: ${escapeHtml(state.savedPath)}`
@@ -403,11 +525,15 @@ function renderStatusLabel(status: UiState["status"]): string {
 
 function renderStatusText(state: UiState): string {
   if (state.status === "processing" && state.progress) {
-    return `${state.progress.completedUniqueLookups}/${state.progress.totalUniqueLookups} consultas únicas. ETA ${formatDuration(state.progress.estimatedRemainingMs)}.`;
+    return formatProgressLine(state.progress);
   }
 
   if (state.status === "success" && state.summary) {
-    return `${state.summary.totalLinhas} linhas, ${state.summary.totalCnpjsUnicosConsultados} consultas únicas.`;
+    const autoSaveText = state.savedPath
+      ? "auto-save concluído"
+      : "aguardando salvamento";
+
+    return `${state.summary.totalLinhas} linhas processadas, ${state.summary.totalCnpjsUnicosConsultados} consultas únicas, ${autoSaveText}.`;
   }
 
   return state.message;
@@ -451,21 +577,4 @@ function escapeHtml(value: string): string {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
-}
-
-function formatDuration(durationInMs: number): string {
-  const totalSeconds = Math.max(0, Math.round(durationInMs / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-
-  if (minutes > 0) {
-    return `${minutes}m ${seconds}s`;
-  }
-
-  return `${seconds}s`;
 }

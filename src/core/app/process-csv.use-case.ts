@@ -3,9 +3,9 @@ import { validateCnpj } from "../cnpj/validate-cnpj";
 import { writeCsv } from "../export/csv-writer";
 import { readCsv } from "../ingestion/csv-reader";
 import { detectCnpjColumn } from "../ingestion/detect-cnpj-column";
-import type { LookupProgress, ProcessCsvSummary } from "../../main/types";
 import type { SimplesLookupPort } from "../simples/simples-lookup.port";
 import type { SimplesLookupResult } from "../simples/simples-lookup.types";
+import type { LookupProgress, ProcessCsvSummary } from "./process-csv.types";
 
 type ProcessCsvOptions = {
   cnpjColumn?: string;
@@ -162,7 +162,10 @@ function estimateRemainingMs(
   completedUniqueLookups: number,
   totalUniqueLookups: number,
 ): number {
-  const remainingLookups = Math.max(0, totalUniqueLookups - completedUniqueLookups);
+  const remainingLookups = Math.max(
+    0,
+    totalUniqueLookups - completedUniqueLookups,
+  );
 
   return remainingLookups * 12_000;
 }

@@ -1,5 +1,5 @@
-import path from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { dialog, ipcMain, powerSaveBlocker } from "electron";
 
 import { processCsv } from "../../core/app/process-csv.use-case";
