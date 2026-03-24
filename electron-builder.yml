@@ -1,0 +1,20 @@
+appId: com.icaroaguiar.consulta-simples-csv
+productName: Consulta Simples CSV
+directories:
+  output: release
+files:
+  - dist/**
+  - dist-electron/**
+  - package.json
+asar: true
+mac:
+  target:
+    - dmg
+win:
+  target:
+    - nsis
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+

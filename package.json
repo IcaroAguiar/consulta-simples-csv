@@ -1,0 +1,43 @@
+{
+  "name": "consulta-simples-csv",
+  "version": "0.1.0",
+  "description": "App desktop para validar enquadramento no Simples Nacional a partir de CSV.",
+  "private": false,
+  "type": "module",
+  "main": "dist-electron/main.cjs",
+  "packageManager": "pnpm@10.32.1",
+  "scripts": {
+    "dev": "concurrently -k \"pnpm dev:renderer\" \"pnpm dev:main\" \"pnpm dev:electron\"",
+    "dev:renderer": "vite",
+    "dev:main": "tsup src/main/main.ts src/main/preload.ts --format cjs --out-dir dist-electron --watch",
+    "dev:electron": "wait-on tcp:5173 file:dist-electron/main.cjs && electronmon .",
+    "build": "pnpm build:renderer && pnpm build:main",
+    "build:renderer": "vite build",
+    "build:main": "tsup src/main/main.ts src/main/preload.ts --format cjs --out-dir dist-electron",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dist:mac": "pnpm build && electron-builder --mac dmg",
+    "dist:win": "pnpm build && electron-builder --win nsis",
+    "dist:dir": "pnpm build && electron-builder --dir",
+    "start": "electron ."
+  },
+  "dependencies": {
+    "csv-parse": "^6.1.0",
+    "csv-stringify": "^6.6.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.2.4",
+    "@types/node": "^24.6.0",
+    "concurrently": "^9.2.1",
+    "electron": "^38.3.0",
+    "electron-builder": "^26.0.12",
+    "electronmon": "^2.0.3",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.7",
+    "vitest": "^3.2.4",
+    "wait-on": "^8.0.5"
+  }
+}
