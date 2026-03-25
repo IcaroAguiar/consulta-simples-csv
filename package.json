@@ -19,7 +19,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "dist:mac": "pnpm build && electron-builder --mac dmg",
-    "dist:win": "pnpm build && electron-builder --win nsis",
+    "dist:win": "pnpm build && electron-builder --win nsis --publish never",
     "dist:dir": "pnpm build && electron-builder --dir",
     "repair:electron": "pnpm rebuild electron esbuild",
     "start": "electron ."
