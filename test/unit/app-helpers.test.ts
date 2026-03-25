@@ -19,7 +19,17 @@ describe("extractMessage", () => {
     );
 
     expect(extractMessage(error, "Falha ao processar o CSV.")).toBe(
-      "O arquivo selecionado não parece ser um CSV válido. Revise o delimitador, aspas e a codificação do arquivo e tente novamente.",
+      "O arquivo selecionado não parece ser um CSV válido ou está com linhas inconsistentes. Revise o delimitador, as aspas e a codificação do arquivo, e tente novamente.",
+    );
+  });
+
+  it("returns friendly guidance for ambiguous csv delimiters", () => {
+    const error = new Error(
+      "Error invoking remote method 'csv:process': Error: Invalid Record Length: expect 1, got 4 on line 208",
+    );
+
+    expect(extractMessage(error, "Falha ao processar o CSV.")).toBe(
+      "O arquivo selecionado parece usar um delimitador diferente do esperado ou tem linhas quebradas. Revise se o arquivo está separado por ponto e vírgula, vírgula ou tabulação, e tente novamente.",
     );
   });
 

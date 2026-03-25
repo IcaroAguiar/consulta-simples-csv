@@ -1,6 +1,6 @@
 {
   "name": "consulta-simples-csv",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "App desktop para validar enquadramento no Simples Nacional a partir de CSV.",
   "private": false,
   "type": "module",

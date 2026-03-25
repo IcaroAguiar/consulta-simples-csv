@@ -1,13 +1,15 @@
 import { stringify } from "csv-stringify/sync";
 
+export type CsvDelimiter = "," | ";" | "\t";
+
 export function writeCsv(
   rows: Array<Record<string, string>>,
-  delimiter: "," | ";",
+  delimiter: CsvDelimiter,
   columns?: string[],
 ): string {
   const options: {
     header: true;
-    delimiter: "," | ";";
+    delimiter: CsvDelimiter;
     columns?: string[];
   } = {
     header: true,

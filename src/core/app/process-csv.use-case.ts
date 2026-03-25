@@ -30,7 +30,7 @@ export async function processCsv(
   provider: SimplesLookupPort,
   options: ProcessCsvOptions = {},
 ): Promise<ProcessCsvResult> {
-  const { delimiter, headers, rows } = readCsv(inputCsv);
+  const { delimiter, headers, rowLineNumbers, rows } = readCsv(inputCsv);
   const cnpjColumn = detectCnpjColumn(
     headers,
     options.cnpjColumn ? { override: options.cnpjColumn } : {},
@@ -156,7 +156,7 @@ export async function processCsv(
       status: lookupResult.status,
       fonte: lookupResult.source,
       mensagem: lookupResult.message ?? "",
-      linha: String(index + 1),
+      linha: String(rowLineNumbers[index] ?? index + 1),
     });
   }
 

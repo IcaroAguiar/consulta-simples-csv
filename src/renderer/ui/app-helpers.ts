@@ -2,6 +2,15 @@ import type { LookupProgress } from "../../main/types";
 import type { ProcessCsvResult, UiState, UiStatus } from "./app.types";
 import { countdownRemainingMs, formatProgressLine } from "./operational-copy";
 
+const XLSX_GUIDANCE_MESSAGE =
+  "O arquivo selecionado parece ser uma planilha do Excel (.xlsx), não um CSV. Exporte a planilha como CSV UTF-8 e tente novamente.";
+
+const MALFORMED_CSV_GUIDANCE_MESSAGE =
+  "O arquivo selecionado não parece ser um CSV válido ou está com linhas inconsistentes. Revise o delimitador, as aspas e a codificação do arquivo, e tente novamente.";
+
+const AMBIGUOUS_CSV_GUIDANCE_MESSAGE =
+  "O arquivo selecionado parece usar um delimitador diferente do esperado ou tem linhas quebradas. Revise se o arquivo está separado por ponto e vírgula, vírgula ou tabulação, e tente novamente.";
+
 export function getStatusPillVariant(
   status: UiStatus,
 ): "default" | "muted" | "success" | "danger" {
@@ -135,11 +144,15 @@ function normalizeUserFacingMessage(
   }
 
   if (looksLikeExcelContent(message)) {
-    return "O arquivo selecionado parece ser uma planilha do Excel (.xlsx), não um CSV. Exporte a planilha como CSV UTF-8 e tente novamente.";
+    return XLSX_GUIDANCE_MESSAGE;
+  }
+
+  if (looksLikeAmbiguousCsv(message)) {
+    return AMBIGUOUS_CSV_GUIDANCE_MESSAGE;
   }
 
   if (looksLikeMalformedCsv(message)) {
-    return "O arquivo selecionado não parece ser um CSV válido. Revise o delimitador, aspas e a codificação do arquivo e tente novamente.";
+    return MALFORMED_CSV_GUIDANCE_MESSAGE;
   }
 
   if (message.includes("Ja existe um processamento em andamento.")) {
@@ -184,6 +197,12 @@ function looksLikeMalformedCsv(message: string): boolean {
     message.includes("Invalid Opening Quote") ||
     message.includes("Invalid Closing Quote") ||
     message.includes("Quote Not Closed") ||
+    message.includes("CSV_RECORD_INCONSISTENT")
+  );
+}
+
+function looksLikeAmbiguousCsv(message: string): boolean {
+  return (
     message.includes("Invalid Record Length") ||
     message.includes("CSV_RECORD_INCONSISTENT")
   );
