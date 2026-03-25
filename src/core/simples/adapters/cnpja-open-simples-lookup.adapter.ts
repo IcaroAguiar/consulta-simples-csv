@@ -1,7 +1,10 @@
 import type { HttpClient } from "../../infra/http-client";
 import { FetchHttpClient } from "../../infra/http-client";
-import { RateLimiter } from "../../infra/rate-limiter";
-import type { SimplesLookupPort } from "../simples-lookup.port";
+import { AbortError, RateLimiter } from "../../infra/rate-limiter";
+import type {
+  SimplesLookupOptions,
+  SimplesLookupPort,
+} from "../simples-lookup.port";
 import type { SimplesLookupResult } from "../simples-lookup.types";
 
 type CnpjaOfficePayload = {
@@ -19,7 +22,7 @@ type CnpjaOfficePayload = {
 };
 
 type WaitTurnPort = {
-  waitTurn(): Promise<void>;
+  waitTurn(signal?: AbortSignal): Promise<void>;
 };
 
 export class CnpjaOpenSimplesLookupAdapter implements SimplesLookupPort {
@@ -28,9 +31,16 @@ export class CnpjaOpenSimplesLookupAdapter implements SimplesLookupPort {
     private readonly rateLimiter: WaitTurnPort = new RateLimiter(12_000),
   ) {}
 
-  async lookup(cnpj: string): Promise<SimplesLookupResult> {
+  async lookup(
+    cnpj: string,
+    options: SimplesLookupOptions = {},
+  ): Promise<SimplesLookupResult> {
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      await this.rateLimiter.waitTurn();
+      await this.rateLimiter.waitTurn(options.signal);
+
+      if (options.signal?.aborted) {
+        throw new AbortError();
+      }
 
       try {
         const response = await this.httpClient.get(
@@ -50,6 +60,10 @@ export class CnpjaOpenSimplesLookupAdapter implements SimplesLookupPort {
         const payload = (await response.json()) as CnpjaOfficePayload;
         return mapCnpjaOfficeResponse(payload);
       } catch (error) {
+        if (error instanceof AbortError) {
+          throw error;
+        }
+
         if (attempt < 1) {
           continue;
         }

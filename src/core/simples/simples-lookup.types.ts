@@ -3,7 +3,8 @@ export type SimplesLookupStatus =
   | "INVALID_CNPJ"
   | "NOT_FOUND"
   | "TEMPORARY_ERROR"
-  | "PERMANENT_ERROR";
+  | "PERMANENT_ERROR"
+  | "CANCELLED";
 
 export type SimplesLookupResult = {
   cnpj: string;

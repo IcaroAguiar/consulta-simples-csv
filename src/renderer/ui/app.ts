@@ -1,11 +1,14 @@
 import type { SimplesProviderName } from "../../core/simples/simples-provider.factory";
-import type { LookupProgress, ProcessCsvSummary } from "../../main/types";
-import { attemptAutoSave } from "./auto-save";
+import type {
+  LookupProgress,
+  ProcessCsvRunStatus,
+  ProcessCsvSummary,
+} from "../../main/types";
 import {
   buildDedupeLabel,
   countdownRemainingMs,
+  formatCommandBarSummary,
   formatProgressLine,
-  formatProviderMode,
   previewAutoSavePath,
 } from "./operational-copy";
 
@@ -18,6 +21,9 @@ type PickCsvResult = {
 type ProcessCsvResult = {
   outputCsv: string;
   summary: ProcessCsvSummary;
+  runStatus: ProcessCsvRunStatus;
+  savedPath: string | null;
+  warningMessage: string | null;
 };
 
 type AppBridge = {
@@ -26,7 +32,9 @@ type AppBridge = {
     content: string;
     provider: SimplesProviderName;
     cnpjColumn?: string;
+    sourceFilePath?: string;
   }): Promise<ProcessCsvResult>;
+  cancelProcessing(): Promise<boolean>;
   saveCsvFile(defaultName: string, content: string): Promise<string | null>;
   autoSaveCsvFile(sourceFilePath: string, content: string): Promise<string>;
   onLookupProgress(callback: (progress: LookupProgress) => void): () => void;
@@ -45,7 +53,7 @@ type UiState = {
   content: string | null;
   provider: SimplesProviderName;
   cnpjColumn: string;
-  status: "idle" | "loading" | "processing" | "success" | "error";
+  status: "idle" | "loading" | "processing" | "success" | "cancelled" | "error";
   message: string;
   outputCsv: string | null;
   summary: ProcessCsvSummary | null;
@@ -89,23 +97,25 @@ export function mountApp(root: HTMLDivElement | null): void {
     saveButton: root.querySelector<HTMLButtonElement>(
       '[data-action="save-file"]',
     ),
+    cancelButton: root.querySelector<HTMLButtonElement>(
+      '[data-action="cancel-processing"]',
+    ),
     providerSelect: root.querySelector<HTMLSelectElement>(
       '[data-field="provider"]',
     ),
     columnInput: root.querySelector<HTMLInputElement>(
       '[data-field="cnpj-column"]',
     ),
-    fileLabel: root.querySelector<HTMLElement>('[data-slot="file-label"]'),
+    commandSummary: root.querySelector<HTMLElement>(
+      '[data-slot="command-summary"]',
+    ),
     message: root.querySelector<HTMLElement>('[data-slot="message"]'),
     summary: root.querySelector<HTMLElement>('[data-slot="summary"]'),
     outputStatus: root.querySelector<HTMLElement>(
       '[data-slot="output-status"]',
     ),
-    providerMode: root.querySelector<HTMLElement>(
-      '[data-slot="provider-mode"]',
-    ),
-    autoSavePreview: root.querySelector<HTMLElement>(
-      '[data-slot="auto-save-preview"]',
+    autoSavePreviews: Array.from(
+      root.querySelectorAll<HTMLElement>('[data-slot="auto-save-preview"]'),
     ),
     dedupeLabel: root.querySelector<HTMLElement>('[data-slot="dedupe-label"]'),
     progressLine: root.querySelector<HTMLElement>(
@@ -156,6 +166,10 @@ export function mountApp(root: HTMLDivElement | null): void {
 
     refs.processButton?.addEventListener("click", () => {
       void handleProcessFile();
+    });
+
+    refs.cancelButton?.addEventListener("click", () => {
+      void handleCancelProcessing();
     });
 
     refs.saveButton?.addEventListener("click", () => {
@@ -231,6 +245,7 @@ export function mountApp(root: HTMLDivElement | null): void {
       const result = await window.appBridge.processCsv({
         content: state.content,
         provider: state.provider,
+        ...(state.filePath ? { sourceFilePath: state.filePath } : {}),
         ...(state.cnpjColumn.trim()
           ? { cnpjColumn: state.cnpjColumn.trim() }
           : {}),
@@ -238,23 +253,33 @@ export function mountApp(root: HTMLDivElement | null): void {
 
       state.outputCsv = result.outputCsv;
       state.summary = result.summary;
-      const autoSaveResult = await attemptAutoSave(
-        window.appBridge.autoSaveCsvFile,
-        state.filePath,
-        result.outputCsv,
-      );
-
-      state.savedPath = autoSaveResult.savedPath;
-      state.status = "success";
-      state.message =
-        autoSaveResult.warningMessage ??
-        (state.savedPath
-          ? "Processamento concluido e CSV salvo automaticamente."
-          : "Processamento concluido.");
+      state.savedPath = result.savedPath;
+      state.status = result.runStatus === "CANCELLED" ? "cancelled" : "success";
+      state.message = buildCompletionMessage(result);
       syncUi();
     } catch (error) {
       state.status = "error";
       state.message = extractMessage(error, "Falha ao processar o CSV.");
+      syncUi();
+    }
+  }
+
+  async function handleCancelProcessing(): Promise<void> {
+    if (state.status !== "processing") {
+      return;
+    }
+
+    try {
+      const requested = await window.appBridge.cancelProcessing();
+      state.message = requested
+        ? "Cancelamento solicitado. O app vai concluir a consulta em andamento e salvar o resultado parcial."
+        : "Nao havia processamento ativo para cancelar.";
+      syncUi();
+    } catch (error) {
+      state.message = extractMessage(
+        error,
+        "Nao foi possivel solicitar o cancelamento.",
+      );
       syncUi();
     }
   }
@@ -294,11 +319,6 @@ export function mountApp(root: HTMLDivElement | null): void {
   }
 
   function syncUi(): void {
-    if (refs.fileLabel) {
-      refs.fileLabel.textContent =
-        state.fileName ?? "Nenhum arquivo selecionado";
-    }
-
     if (refs.message) {
       refs.message.textContent = state.message;
     }
@@ -315,16 +335,14 @@ export function mountApp(root: HTMLDivElement | null): void {
       refs.outputStatus.textContent = renderStatusText(state);
     }
 
-    if (refs.providerMode) {
-      refs.providerMode.textContent = formatProviderMode(state.provider);
-    }
+    const autoSavePreviewText = state.savedPath
+      ? state.savedPath
+      : state.filePath
+        ? previewAutoSavePath(state.filePath)
+        : "Nenhum caminho ainda";
 
-    if (refs.autoSavePreview) {
-      refs.autoSavePreview.textContent = state.savedPath
-        ? state.savedPath
-        : state.filePath
-          ? previewAutoSavePath(state.filePath)
-          : "Nenhum caminho ainda";
+    for (const preview of refs.autoSavePreviews) {
+      preview.textContent = autoSavePreviewText;
     }
 
     if (refs.dedupeLabel) {
@@ -334,7 +352,9 @@ export function mountApp(root: HTMLDivElement | null): void {
     }
 
     if (refs.progressLine) {
-      refs.progressLine.textContent = formatProgressLine(state.progress);
+      refs.progressLine.textContent = formatProgressLine(
+        getLiveProgress(state),
+      );
     }
 
     if (refs.progressBar) {
@@ -360,6 +380,13 @@ export function mountApp(root: HTMLDivElement | null): void {
         state.progress?.currentCnpj ?? "Aguardando primeiro CNPJ";
     }
 
+    if (refs.commandSummary) {
+      refs.commandSummary.textContent = formatCommandBarSummary(
+        state.fileName,
+        state.provider,
+      );
+    }
+
     if (refs.summary) {
       refs.summary.innerHTML = renderSummary(state.summary);
     }
@@ -369,6 +396,10 @@ export function mountApp(root: HTMLDivElement | null): void {
         state.status === "processing" || !state.content;
       refs.processButton.textContent =
         state.status === "processing" ? "Processando..." : "Processar CSV";
+    }
+
+    if (refs.cancelButton) {
+      refs.cancelButton.disabled = state.status !== "processing";
     }
 
     if (refs.saveButton) {
@@ -386,20 +417,41 @@ function renderShell(state: UiState): string {
 
   return `
     <main class="app-shell">
+      <header class="topbar">
+        <div class="brand-lockup">
+          <span class="brand-mark" aria-hidden="true">CS</span>
+          <div class="brand-lockup__copy">
+            <p class="eyebrow">Consulta Simples CSV</p>
+            <strong>Ferramenta operacional para lotes longos com CNPJá.</strong>
+          </div>
+        </div>
+        <div class="topbar__chips" aria-label="Capacidades da interface">
+          <span class="status-pill status-pill--muted">Sem banco</span>
+          <span class="status-pill status-pill--muted">Auto-save</span>
+          <span class="status-pill status-pill--muted">Dedupe único</span>
+        </div>
+      </header>
+
       <section class="hero">
         <div class="hero__copy">
           <p class="eyebrow">Consulta Simples CSV</p>
-          <h1>Fila operacional para 3 horas de consultas deduplicadas.</h1>
+          <h1>Mesa operacional para lotes longos de CNPJs.</h1>
           <p class="lede">
-            O app processa apenas CNPJs únicos válidos, mantém o operador informado com ETA e grava a saída automaticamente ao lado do CSV original.
+            O app processa apenas CNPJs únicos válidos, mantém o operador informado com ETA vivo e grava a saída automaticamente ao lado do CSV original.
           </p>
+          <div class="hero__meta" aria-label="Características do fluxo">
+            <span class="hero__meta-chip">Leitura de CSV local</span>
+            <span class="hero__meta-chip">Provider selecionável</span>
+            <span class="hero__meta-chip">ETA em tempo real</span>
+          </div>
         </div>
         <div class="hero__status" aria-live="polite">
+          <span class="ops-label">Console operacional</span>
           <div class="status-chip-row">
             <span class="status-pill">${renderStatusLabel(state.status)}</span>
-            <span class="status-pill status-pill--muted" data-slot="provider-mode">${formatProviderMode(
-              state.provider,
-            )}</span>
+            <span class="status-pill status-pill--muted">${
+              state.fileName ? "Arquivo carregado" : "Aguardando CSV"
+            }</span>
           </div>
           <div class="status-stack">
             <strong data-slot="current-cnpj">${
@@ -446,18 +498,34 @@ function renderShell(state: UiState): string {
           <div class="panel__header">
             <div>
               <p class="panel__kicker">Arquivo de entrada</p>
-              <h2>Selecionar e processar</h2>
+              <h2>Entrada e execução</h2>
             </div>
-            <button class="button button--ghost" data-action="pick-file" type="button">
-              Selecionar CSV
-            </button>
           </div>
 
-          <div class="field field--file">
-            <span class="field__label">Arquivo</span>
-            <strong data-slot="file-label">${escapeHtml(
-              state.fileName ?? "Nenhum arquivo selecionado",
-            )}</strong>
+          <div class="command-bar">
+            <div class="command-bar__context">
+              <span class="ops-label">Arquivo ativo</span>
+              <strong data-slot="command-summary">${escapeHtml(
+                formatCommandBarSummary(state.fileName, state.provider),
+              )}</strong>
+              <span class="command-bar__hint">
+                CSV com header, CNPJ normalizado e saída ao lado do original.
+              </span>
+            </div>
+            <div class="command-bar__actions">
+              <button class="button button--ghost" data-action="pick-file" type="button">
+                Selecionar CSV
+              </button>
+              <button class="button button--primary" data-action="process-file" type="button">
+                Processar CSV
+              </button>
+              <button class="button button--danger" data-action="cancel-processing" type="button">
+                Cancelar lote
+              </button>
+              <button class="button button--secondary" data-action="save-file" type="button">
+                Salvar cópia manual
+              </button>
+            </div>
           </div>
 
           <div class="grid">
@@ -479,15 +547,6 @@ function renderShell(state: UiState): string {
                 placeholder="Ex.: cpf_cnpj"
               />
             </label>
-          </div>
-
-          <div class="actions">
-            <button class="button button--primary" data-action="process-file" type="button">
-              Processar CSV
-            </button>
-            <button class="button button--secondary" data-action="save-file" type="button">
-              Salvar cópia manual
-            </button>
           </div>
 
           <p class="message" data-slot="message">${escapeHtml(state.message)}</p>
@@ -532,6 +591,10 @@ function renderStatusLabel(status: UiState["status"]): string {
     return "Pronto";
   }
 
+  if (status === "cancelled") {
+    return "Cancelado";
+  }
+
   if (status === "error") {
     return "Erro";
   }
@@ -545,10 +608,7 @@ function renderStatusLabel(status: UiState["status"]): string {
 
 function renderStatusText(state: UiState): string {
   if (state.status === "processing" && state.progress) {
-    return formatProgressLine({
-      ...state.progress,
-      estimatedRemainingMs: getLiveRemainingMs(state),
-    });
+    return formatProgressLine(getLiveProgress(state));
   }
 
   if (state.status === "success" && state.summary) {
@@ -556,7 +616,11 @@ function renderStatusText(state: UiState): string {
       ? "auto-save concluído"
       : "aguardando salvamento";
 
-    return `${state.summary.totalLinhas} linhas processadas, ${state.summary.totalCnpjsUnicosConsultados} consultas únicas, ${autoSaveText}.`;
+    return `${state.summary.totalLinhas} linhas • ${state.summary.totalCnpjsUnicosConsultados} consultas únicas • ${autoSaveText}.`;
+  }
+
+  if (state.status === "cancelled" && state.summary) {
+    return `${state.summary.totalLinhas} linhas • ${state.summary.totalCnpjsUnicosConsultados} consultas únicas concluídas antes do cancelamento.`;
   }
 
   return state.message;
@@ -610,5 +674,37 @@ function getLiveRemainingMs(state: UiState): number {
   return countdownRemainingMs(
     state.progress.estimatedRemainingMs,
     state.now - state.progressObservedAt,
+  );
+}
+
+function getLiveProgress(state: UiState): LookupProgress | null {
+  if (!state.progress || state.progressObservedAt === null) {
+    return state.progress;
+  }
+
+  return {
+    ...state.progress,
+    elapsedMs:
+      state.progress.elapsedMs +
+      Math.max(0, state.now - state.progressObservedAt),
+    estimatedRemainingMs: getLiveRemainingMs(state),
+  };
+}
+
+function buildCompletionMessage(result: ProcessCsvResult): string {
+  if (result.runStatus === "CANCELLED") {
+    return (
+      result.warningMessage ??
+      (result.savedPath
+        ? "Processamento cancelado e CSV parcial salvo automaticamente."
+        : "Processamento cancelado.")
+    );
+  }
+
+  return (
+    result.warningMessage ??
+    (result.savedPath
+      ? "Processamento concluido e CSV salvo automaticamente."
+      : "Processamento concluido.")
   );
 }

@@ -1,7 +1,11 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 import type { SimplesProviderName } from "../core/simples/simples-provider.factory";
-import type { LookupProgress, ProcessCsvSummary } from "./types";
+import type {
+  LookupProgress,
+  ProcessCsvRunStatus,
+  ProcessCsvSummary,
+} from "./types";
 
 type PickCsvResult = {
   filePath: string;
@@ -13,11 +17,15 @@ type ProcessCsvInput = {
   content: string;
   provider: SimplesProviderName;
   cnpjColumn?: string;
+  sourceFilePath?: string;
 };
 
 type ProcessCsvResult = {
   outputCsv: string;
   summary: ProcessCsvSummary;
+  runStatus: ProcessCsvRunStatus;
+  savedPath: string | null;
+  warningMessage: string | null;
 };
 
 type AppDefaults = {
@@ -30,6 +38,9 @@ contextBridge.exposeInMainWorld("appBridge", {
   },
   processCsv: (input: ProcessCsvInput): Promise<ProcessCsvResult> => {
     return ipcRenderer.invoke("csv:process", input);
+  },
+  cancelProcessing: (): Promise<boolean> => {
+    return ipcRenderer.invoke("csv:cancel-processing");
   },
   saveCsvFile: (
     defaultName: string,

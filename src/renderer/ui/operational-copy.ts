@@ -27,6 +27,15 @@ export function formatProviderMode(provider: SimplesProviderName): string {
   return provider === "cnpja-open" ? "CNPJá Open live" : "Mock local";
 }
 
+export function formatCommandBarSummary(
+  fileName: string | null,
+  provider: SimplesProviderName,
+): string {
+  const label = fileName ?? "Nenhum CSV carregado";
+
+  return `${label} • ${formatProviderMode(provider)}`;
+}
+
 export function buildDedupeLabel(source: DedupeSource): string {
   const duplicates = Math.max(
     0,
@@ -47,7 +56,7 @@ export function formatProgressLine(progress: LookupProgress | null): string {
     return "Aguardando arquivo para iniciar as consultas únicas.";
   }
 
-  return `${progress.completedUniqueLookups}/${progress.totalUniqueLookups} consultas únicas • ETA ${formatDuration(progress.estimatedRemainingMs)} • atual ${progress.currentCnpj}`;
+  return `${progress.completedUniqueLookups}/${progress.totalUniqueLookups} consultas únicas • decorrido ${formatDuration(progress.elapsedMs)} • ETA ${formatDuration(progress.estimatedRemainingMs)} • atual ${progress.currentCnpj}`;
 }
 
 export function countdownRemainingMs(

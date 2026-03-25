@@ -12,5 +12,8 @@ export type LookupProgress = {
   completedUniqueLookups: number;
   totalUniqueLookups: number;
   currentCnpj: string;
+  elapsedMs: number;
   estimatedRemainingMs: number;
 };
+
+export type ProcessCsvRunStatus = "SUCCESS" | "CANCELLED";

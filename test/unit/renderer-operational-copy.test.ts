@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildDedupeLabel,
   countdownRemainingMs,
+  formatCommandBarSummary,
   formatDuration,
   formatProviderMode,
   previewAutoSavePath,
@@ -18,6 +19,15 @@ describe("renderer operational copy", () => {
   it("formats the provider mode label", () => {
     expect(formatProviderMode("mock")).toBe("Mock local");
     expect(formatProviderMode("cnpja-open")).toBe("CNPJá Open live");
+  });
+
+  it("formats the command bar summary with file and provider", () => {
+    expect(formatCommandBarSummary("clientes.csv", "mock")).toBe(
+      "clientes.csv • Mock local",
+    );
+    expect(formatCommandBarSummary(null, "cnpja-open")).toBe(
+      "Nenhum CSV carregado • CNPJá Open live",
+    );
   });
 
   it("builds a readable dedupe label", () => {

@@ -1,20 +1,28 @@
 import { normalizeCnpj } from "../cnpj/normalize-cnpj";
 import { validateCnpj } from "../cnpj/validate-cnpj";
 import { writeCsv } from "../export/csv-writer";
+import { AbortError } from "../infra/rate-limiter";
 import { readCsv } from "../ingestion/csv-reader";
 import { detectCnpjColumn } from "../ingestion/detect-cnpj-column";
 import type { SimplesLookupPort } from "../simples/simples-lookup.port";
 import type { SimplesLookupResult } from "../simples/simples-lookup.types";
-import type { LookupProgress, ProcessCsvSummary } from "./process-csv.types";
+import { estimateObservedRemainingMs } from "./eta";
+import type {
+  LookupProgress,
+  ProcessCsvRunStatus,
+  ProcessCsvSummary,
+} from "./process-csv.types";
 
 type ProcessCsvOptions = {
   cnpjColumn?: string;
   onLookupProgress?: (progress: LookupProgress) => void;
+  signal?: AbortSignal;
 };
 
 type ProcessCsvResult = {
   outputCsv: string;
   summary: ProcessCsvSummary;
+  runStatus: ProcessCsvRunStatus;
 };
 
 export async function processCsv(
@@ -37,6 +45,8 @@ export async function processCsv(
   let completedUniqueLookups = 0;
   let totalCnpjsEncontrados = 0;
   let totalCnpjsValidos = 0;
+  let runStatus: ProcessCsvRunStatus = "SUCCESS";
+  const startedAt = Date.now();
   const outputColumns = [
     ...headers,
     "cnpj_original",
@@ -53,6 +63,10 @@ export async function processCsv(
   const outputRows: Array<Record<string, string>> = [];
 
   for (const [index, row] of rows.entries()) {
+    if (isCancellationBoundary(options.signal)) {
+      runStatus = "CANCELLED";
+    }
+
     const cnpjOriginal = row[cnpjColumn] ?? "";
     const cnpjNormalizado = normalizeCnpj(cnpjOriginal);
     const cnpjValido = validateCnpj(cnpjNormalizado);
@@ -72,6 +86,16 @@ export async function processCsv(
         status: "INVALID_CNPJ",
         message: "CNPJ invalido",
       };
+    } else if (runStatus === "CANCELLED") {
+      const cachedResult = lookupCache.get(cnpjNormalizado);
+      lookupResult = cachedResult ?? {
+        cnpj: cnpjNormalizado,
+        simplesNacional: null,
+        simei: null,
+        source: "system",
+        status: "CANCELLED",
+        message: "Processamento cancelado antes desta consulta",
+      };
     } else {
       totalCnpjsValidos += 1;
 
@@ -79,18 +103,46 @@ export async function processCsv(
       if (cachedResult) {
         lookupResult = cachedResult;
       } else {
-        lookupResult = await provider.lookup(cnpjNormalizado);
-        lookupCache.set(cnpjNormalizado, lookupResult);
-        completedUniqueLookups += 1;
-        options.onLookupProgress?.({
-          completedUniqueLookups,
-          totalUniqueLookups: uniqueValidCnpjs.length,
-          currentCnpj: cnpjNormalizado,
-          estimatedRemainingMs: estimateRemainingMs(
+        try {
+          lookupResult = await provider.lookup(
+            cnpjNormalizado,
+            options.signal ? { signal: options.signal } : undefined,
+          );
+        } catch (error) {
+          if (error instanceof AbortError) {
+            runStatus = "CANCELLED";
+            lookupResult = {
+              cnpj: cnpjNormalizado,
+              simplesNacional: null,
+              simei: null,
+              source: "system",
+              status: "CANCELLED",
+              message: "Processamento cancelado antes desta consulta",
+            };
+          } else {
+            throw error;
+          }
+        }
+
+        if (lookupResult.status === "CANCELLED") {
+          runStatus = "CANCELLED";
+        }
+
+        if (runStatus === "SUCCESS") {
+          lookupCache.set(cnpjNormalizado, lookupResult);
+          completedUniqueLookups += 1;
+          options.onLookupProgress?.({
             completedUniqueLookups,
-            uniqueValidCnpjs.length,
-          ),
-        });
+            totalUniqueLookups: uniqueValidCnpjs.length,
+            currentCnpj: cnpjNormalizado,
+            elapsedMs: Date.now() - startedAt,
+            estimatedRemainingMs: estimateObservedRemainingMs(
+              Date.now() - startedAt,
+              completedUniqueLookups,
+              uniqueValidCnpjs.length,
+            ),
+          });
+        }
       }
     }
 
@@ -114,9 +166,6 @@ export async function processCsv(
   const totalNaoOptantesSimples = outputRows.filter(
     (row) => row.simples_nacional === "false",
   ).length;
-  const totalErros = outputRows.filter(
-    (row) => row.status !== "SUCCESS",
-  ).length;
 
   return {
     outputCsv: writeCsv(outputRows, delimiter, outputColumns),
@@ -127,8 +176,15 @@ export async function processCsv(
       totalCnpjsUnicosConsultados: lookupCache.size,
       totalOptantesSimples,
       totalNaoOptantesSimples,
-      totalErros,
+      totalErros: outputRows.filter(
+        (row) =>
+          row.status === "INVALID_CNPJ" ||
+          row.status === "NOT_FOUND" ||
+          row.status === "TEMPORARY_ERROR" ||
+          row.status === "PERMANENT_ERROR",
+      ).length,
     },
+    runStatus,
   };
 }
 
@@ -158,14 +214,6 @@ function collectUniqueValidCnpjs(
   return Array.from(uniqueValid);
 }
 
-function estimateRemainingMs(
-  completedUniqueLookups: number,
-  totalUniqueLookups: number,
-): number {
-  const remainingLookups = Math.max(
-    0,
-    totalUniqueLookups - completedUniqueLookups,
-  );
-
-  return remainingLookups * 12_000;
+function isCancellationBoundary(signal?: AbortSignal): boolean {
+  return signal?.aborted === true;
 }
