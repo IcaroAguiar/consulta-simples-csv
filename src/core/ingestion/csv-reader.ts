@@ -9,6 +9,8 @@ export type CsvReadResult = {
 };
 
 export function readCsv(input: string): CsvReadResult {
+  assertSupportedCsvInput(input);
+
   const delimiter = detectDelimiter(input);
   const records = parse(input, {
     bom: true,
@@ -40,4 +42,12 @@ function detectDelimiter(input: string): "," | ";" {
   const commas = firstLine.split(",").length - 1;
 
   return semicolons > commas ? ";" : ",";
+}
+
+function assertSupportedCsvInput(input: string): void {
+  if (input.startsWith("PK\u0003\u0004")) {
+    throw new Error(
+      "O arquivo selecionado parece ser uma planilha do Excel (.xlsx), não um CSV. Exporte a planilha como CSV UTF-8 e tente novamente.",
+    );
+  }
 }
