@@ -64,6 +64,24 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Publish rolling unsigned release
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: windows-unsigned-latest
+          name: Windows unsigned (latest)
+          prerelease: true
+          make_latest: false
+          generate_release_notes: false
+          body: |
+            Build contínuo mais recente do instalador Windows unsigned.
+
+            Use este pacote para testes internos e validação manual.
+          files: |
+            release/*.exe
+            release/*.yml
+            release/*.blockmap
+
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2

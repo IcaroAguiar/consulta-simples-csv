@@ -106,6 +106,7 @@ Build Windows via GitHub Actions:
 
 - workflow: `Windows EXE unsigned`
 - gera artefatos `.exe`, `.yml` e `.blockmap`
+- em execuções manuais, publica também uma Release contínua chamada `Windows unsigned (latest)` para download direto
 
 ## Testes e validação
 
