@@ -1,0 +1,1 @@
+export const CNPJA_OPEN_RATE_LIMIT_INTERVAL_MS = 12_000;

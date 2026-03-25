@@ -673,10 +673,6 @@ input::placeholder {
   border: 1px solid rgba(50, 196, 141, 0.2);
 }
 
-.save-info .ops-label {
-  color: var(--semantic-success);
-}
-
 .save-path {
   font-size: var(--font-size-sm);
   color: var(--semantic-success);
@@ -719,6 +715,10 @@ input::placeholder {
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.save-info .ops-label {
+  color: var(--semantic-success);
 }
 
 /* Responsive */

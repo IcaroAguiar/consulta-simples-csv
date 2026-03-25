@@ -1,6 +1,7 @@
 import type { HttpClient } from "../../infra/http-client";
 import { FetchHttpClient } from "../../infra/http-client";
 import { AbortError, RateLimiter } from "../../infra/rate-limiter";
+import { CNPJA_OPEN_RATE_LIMIT_INTERVAL_MS } from "../cnpja-open.constants";
 import type {
   SimplesLookupOptions,
   SimplesLookupPort,
@@ -28,7 +29,9 @@ type WaitTurnPort = {
 export class CnpjaOpenSimplesLookupAdapter implements SimplesLookupPort {
   constructor(
     private readonly httpClient: HttpClient = new FetchHttpClient(),
-    private readonly rateLimiter: WaitTurnPort = new RateLimiter(12_000),
+    private readonly rateLimiter: WaitTurnPort = new RateLimiter(
+      CNPJA_OPEN_RATE_LIMIT_INTERVAL_MS,
+    ),
   ) {}
 
   async lookup(
