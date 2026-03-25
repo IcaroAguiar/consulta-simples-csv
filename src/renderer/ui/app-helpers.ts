@@ -66,7 +66,7 @@ export function renderSummary(summary: UiState["summary"]): string {
 
 export function extractMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.trim()) {
-    return error.message;
+    return normalizeUserFacingMessage(error.message, fallback);
   }
 
   return fallback;
@@ -121,5 +121,70 @@ function getLiveRemainingMs(state: UiState): number {
   return countdownRemainingMs(
     state.progress.estimatedRemainingMs,
     state.now - state.progressObservedAt,
+  );
+}
+
+function normalizeUserFacingMessage(
+  rawMessage: string,
+  fallback: string,
+): string {
+  const message = unwrapRemoteMethodMessage(rawMessage);
+
+  if (isFriendlyPortugueseMessage(message)) {
+    return message;
+  }
+
+  if (looksLikeExcelContent(message)) {
+    return "O arquivo selecionado parece ser uma planilha do Excel (.xlsx), não um CSV. Exporte a planilha como CSV UTF-8 e tente novamente.";
+  }
+
+  if (looksLikeMalformedCsv(message)) {
+    return "O arquivo selecionado não parece ser um CSV válido. Revise o delimitador, aspas e a codificação do arquivo e tente novamente.";
+  }
+
+  if (message.includes("Ja existe um processamento em andamento.")) {
+    return "Já existe um processamento em andamento. Aguarde a conclusão atual ou cancele antes de iniciar outro lote.";
+  }
+
+  if (message.includes("Nenhuma coluna de CNPJ suportada foi encontrada")) {
+    return "Não foi encontrada uma coluna de CNPJ compatível. Use uma coluna como cnpj, CNPJ, documento, cpf_cnpj ou cnpj_empresa.";
+  }
+
+  return fallback;
+}
+
+function unwrapRemoteMethodMessage(message: string): string {
+  const remoteMethodPrefix = /Error invoking remote method '[^']+': Error:\s*/;
+
+  return message.replace(remoteMethodPrefix, "").trim();
+}
+
+function isFriendlyPortugueseMessage(message: string): boolean {
+  return (
+    message.startsWith("Não ") ||
+    message.startsWith("Nao ") ||
+    message.startsWith("O arquivo ") ||
+    message.startsWith("Já ") ||
+    message.startsWith("Ja ") ||
+    message.startsWith("Selecione ") ||
+    message.startsWith("Processamento ")
+  );
+}
+
+function looksLikeExcelContent(message: string): boolean {
+  return (
+    message.includes("PK\\u0003\\u0004") ||
+    message.includes("PK\u0003\u0004") ||
+    message.includes("[Content_Types].xml")
+  );
+}
+
+function looksLikeMalformedCsv(message: string): boolean {
+  return (
+    message.includes("Invalid Opening Quote") ||
+    message.includes("Invalid Closing Quote") ||
+    message.includes("Quote Not Closed") ||
+    message.includes("Invalid Record Length") ||
+    message.includes("CSV_RECORD_INCONSISTENT")
   );
 }
