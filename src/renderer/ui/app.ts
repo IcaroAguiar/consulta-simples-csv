@@ -423,7 +423,7 @@ function renderShell(state: UiState): string {
           </div>
           <p class="intro__text">
             Selecione um arquivo CSV contendo CNPJs para verificar o enquadramento de cada empresa no Simples Nacional. 
-            O sistema processa apenas CNPJs únicos,去除 duplicatas e salva o resultado automaticamente ao lado do arquivo original.
+            O sistema processa apenas CNPJs únicos, sem duplicatas, e salva o resultado automaticamente ao lado do arquivo original.
           </p>
         </div>
       </section>

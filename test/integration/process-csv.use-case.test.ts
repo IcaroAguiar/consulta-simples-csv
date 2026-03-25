@@ -7,9 +7,9 @@ describe("processCsv", () => {
   it("enriches rows, reuses duplicate lookups, and preserves original columns", async () => {
     const csv = [
       "nome;cpf_cnpj",
-      "Empresa A;11.222.333/0001-81",
-      "Empresa B;11.222.333/0001-81",
-      "Empresa C;03.426.484/0001-23",
+      "Empresa A;00.000.000/0001-91",
+      "Empresa B;00.000.000/0001-91",
+      "Empresa C;12.345.678/0001-95",
       "Empresa D;123",
     ].join("\n");
 
@@ -23,13 +23,13 @@ describe("processCsv", () => {
     expect(result.summary.totalCnpjsUnicosConsultados).toBe(2);
     expect(result.outputCsv).toContain("simples_nacional");
     expect(result.outputCsv).toContain(
-      "Empresa A;11.222.333/0001-81;11.222.333/0001-81;11222333000181;true;true;false;SUCCESS;mock;;1",
+      "Empresa A;00.000.000/0001-91;00.000.000/0001-91;00000000000191;true;true;false;SUCCESS;mock;;1",
     );
     expect(result.outputCsv).toContain(
-      "Empresa B;11.222.333/0001-81;11.222.333/0001-81;11222333000181;true;true;false;SUCCESS;mock;;2",
+      "Empresa B;00.000.000/0001-91;00.000.000/0001-91;00000000000191;true;true;false;SUCCESS;mock;;2",
     );
     expect(result.outputCsv).toContain(
-      "Empresa C;03.426.484/0001-23;03.426.484/0001-23;03426484000123;true;;;NOT_FOUND;mock;;3",
+      "Empresa C;12.345.678/0001-95;12.345.678/0001-95;12345678000195;true;false;false;SUCCESS;mock;;3",
     );
     expect(result.outputCsv).toContain(
       "Empresa D;123;123;123;false;;;INVALID_CNPJ;system;CNPJ invalido;4",
