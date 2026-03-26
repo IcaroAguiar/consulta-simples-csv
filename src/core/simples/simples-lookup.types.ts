@@ -4,7 +4,10 @@ export type SimplesLookupStatus =
   | "NOT_FOUND"
   | "TEMPORARY_ERROR"
   | "PERMANENT_ERROR"
-  | "CANCELLED";
+  | "CANCELLED"
+  | "BLOCKED"
+  | "CAPTCHA_REQUIRED"
+  | "UNPARSABLE_RESULT";
 
 export type SimplesLookupResult = {
   cnpj: string;

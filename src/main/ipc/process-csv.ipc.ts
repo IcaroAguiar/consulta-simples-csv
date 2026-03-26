@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { dialog, ipcMain, powerSaveBlocker } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, powerSaveBlocker } from "electron";
 
 import { processCsv } from "../../core/app/process-csv.use-case";
 import type { SimplesProviderName } from "../../core/simples/simples-provider.factory";
@@ -23,6 +23,11 @@ type ProcessingCompletionListener = () => void;
 
 let activeProcessingSession: ProcessingSession | null = null;
 const completionListeners = new Set<ProcessingCompletionListener>();
+
+function getMainWindow(): BrowserWindow | undefined {
+  const windows = BrowserWindow.getAllWindows();
+  return windows[0];
+}
 
 export function registerCsvIpc(): void {
   ipcMain.handle("app:get-defaults", () => {
@@ -60,6 +65,14 @@ export function registerCsvIpc(): void {
   ipcMain.handle("csv:process", async (_event, input: ProcessCsvInput) => {
     if (activeProcessingSession) {
       throw new Error("Ja existe um processamento em andamento.");
+    }
+
+    if (app.isPackaged && input.provider === "receita-web") {
+      throw new Error(
+        "O provider 'receita-web' não está disponível em produção. " +
+        "Use 'mock' para testes locais ou 'cnpja-open' para consultas reais. " +
+        "O Playwright requer ambiente de desenvolvimento para funcionar."
+      );
     }
 
     const provider = createSimplesLookupProvider(input.provider);
@@ -114,6 +127,23 @@ export function registerCsvIpc(): void {
         elapsedMs: Date.now() - startedAt,
         savedPath: autoSaveResult.savedPath,
       });
+
+      // Mostrar diálogo de sucesso se o arquivo foi salvo automaticamente
+      if (autoSaveResult.savedPath && result.runStatus === "SUCCESS") {
+        const mainWindow = getMainWindow();
+        if (mainWindow) {
+          dialog.showMessageBox(mainWindow, {
+            type: "info",
+            title: "Processamento concluído",
+            message: "Arquivo salvo com sucesso!",
+            detail: `O arquivo foi salvo em:\n${autoSaveResult.savedPath}`,
+            buttons: ["OK"],
+            defaultId: 0,
+          }).catch(() => {
+            // Ignora erros do diálogo
+          });
+        }
+      }
 
       return {
         ...result,
@@ -213,6 +243,14 @@ export function onProcessingCompleted(
 function normalizeProvider(value: string | undefined): SimplesProviderName {
   if (value === "cnpja-open") {
     return "cnpja-open";
+  }
+
+  if (value === "receita-web") {
+    // Em produção, receita-web não está disponível, usa mock como fallback
+    if (app.isPackaged) {
+      return "mock";
+    }
+    return "receita-web";
   }
 
   return "mock";

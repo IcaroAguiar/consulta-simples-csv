@@ -96,6 +96,7 @@ export function renderShell(state: UiState): string {
               <select id="provider" data-field="provider">
                 <option value="mock" ${state.provider === "mock" ? "selected" : ""}>mock — dados simulados (offline)</option>
                 <option value="cnpja-open" ${state.provider === "cnpja-open" ? "selected" : ""}>cnpja-open — consulta real</option>
+                <option value="receita-web" ${state.provider === "receita-web" ? "selected" : ""}>receita-web — automação portal</option>
               </select>
             </label>
 
