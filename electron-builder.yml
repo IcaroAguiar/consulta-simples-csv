@@ -8,9 +8,9 @@ files:
   - package.json
 asar: true
 asarUnpack:
-  - "node_modules/playwright-core/**/*"
+  - "node_modules/.pnpm/playwright-core@*/node_modules/playwright-core/**/*"
 extraResources:
-  - from: "node_modules/playwright-core/.local-browsers"
+  - from: "node_modules/.pnpm/playwright-core@1.58.2/node_modules/playwright-core/.local-browsers"
     to: "browsers"
     filter:
       - "**/*"

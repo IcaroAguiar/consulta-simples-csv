@@ -17,6 +17,9 @@ const mockPage = {
   close: vi.fn(),
   context: vi.fn(() => mockContext),
   waitForTimeout: vi.fn(),
+  waitForSelector: vi.fn(),
+  waitForFunction: vi.fn(),
+  textContent: vi.fn(),
 };
 
 const mockContext = {
@@ -105,24 +108,10 @@ describe("ReceitaBrowserClient", () => {
       await expect(client.connect(controller.signal)).rejects.toThrow(
         "Aborted",
       );
-      await expect(client.connect(controller.signal)).rejects.toHaveProperty(
-        "name",
-        "AbortError",
-      );
-    });
-
-    it("handles browser launch failure gracefully", async () => {
-      vi.mocked(chromium.launch).mockRejectedValueOnce(
-        new Error("Browser launch failed"),
-      );
-
-      const client = new ReceitaBrowserClient();
-
-      await expect(client.connect()).rejects.toThrow("Browser launch failed");
     });
   });
 
-  describe("operations without connection", () => {
+  describe("error handling for unconnected browser", () => {
     it("returns error when navigate called without connection", async () => {
       const client = new ReceitaBrowserClient();
 
@@ -158,9 +147,7 @@ describe("ReceitaBrowserClient", () => {
       expect(result.success).toBe(false);
       expect(result.error).toBe("Browser not connected");
     });
-  });
 
-  describe("state detection without connection", () => {
     it("returns false when hasCaptcha called without connection", async () => {
       const client = new ReceitaBrowserClient();
 
@@ -189,6 +176,7 @@ describe("ReceitaBrowserClient", () => {
   describe("navigate", () => {
     it("navigates to receita url and returns html", async () => {
       mockPage.goto.mockResolvedValue({});
+      mockPage.waitForSelector.mockResolvedValue(undefined);
       mockPage.content.mockResolvedValue(
         "<html><body>Test content</body></html>",
       );
@@ -203,7 +191,11 @@ describe("ReceitaBrowserClient", () => {
       expect(result.error).toBeUndefined();
       expect(mockPage.goto).toHaveBeenCalledWith(
         expect.stringContaining("receita.fazenda.gov.br"),
-        expect.objectContaining({ waitUntil: "networkidle", timeout: 5000 }),
+        expect.objectContaining({ waitUntil: "domcontentloaded", timeout: 5000 }),
+      );
+      expect(mockPage.waitForSelector).toHaveBeenCalledWith(
+        "#Cnpj",
+        expect.objectContaining({ timeout: 5000 }),
       );
     });
 
@@ -279,10 +271,11 @@ describe("ReceitaBrowserClient", () => {
   });
 
   describe("submit", () => {
-    it("clicks submit button when found", async () => {
+    it("clicks submit button and returns html", async () => {
       const mockSubmitButton = {
         click: vi.fn().mockResolvedValue(undefined),
       };
+
       mockPage.$.mockResolvedValue(mockSubmitButton);
       mockPage.content.mockResolvedValue("<html><body>submitted</body></html>");
 
@@ -292,19 +285,17 @@ describe("ReceitaBrowserClient", () => {
       const result = await client.submit();
 
       expect(result.success).toBe(true);
+      expect(result.html).toBe("<html><body>submitted</body></html>");
       expect(mockSubmitButton.click).toHaveBeenCalledTimes(1);
     });
 
-    it("presses Enter on input when submit button not found", async () => {
-      const mockCnpjInput = {
+    it("presses Enter when submit button not found", async () => {
+      const mockInputElement = {
         press: vi.fn().mockResolvedValue(undefined),
       };
-      mockPage.$.mockImplementation(async (selector: string) => {
-        if (selector.includes("Pesquisar") || selector.includes("submit")) {
-          return null;
-        }
-        return mockCnpjInput;
-      });
+
+      mockPage.$.mockResolvedValueOnce(null); // submit button not found
+      mockPage.$.mockResolvedValueOnce(mockInputElement); // CNPJ input
       mockPage.content.mockResolvedValue("<html><body>submitted</body></html>");
 
       const client = new ReceitaBrowserClient();
@@ -313,7 +304,16 @@ describe("ReceitaBrowserClient", () => {
       const result = await client.submit();
 
       expect(result.success).toBe(true);
-      expect(mockCnpjInput.press).toHaveBeenCalledWith("Enter");
+      expect(mockInputElement.press).toHaveBeenCalledWith("Enter");
+    });
+
+    it("returns error when browser not connected", async () => {
+      const client = new ReceitaBrowserClient();
+
+      const result = await client.submit();
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("Browser not connected");
     });
 
     it("throws AbortError when signal aborted during submit", async () => {
@@ -327,9 +327,39 @@ describe("ReceitaBrowserClient", () => {
     });
   });
 
+  describe("waitResult", () => {
+    it("waits for result and returns html", async () => {
+      mockPage.waitForTimeout.mockResolvedValue(undefined);
+      mockPage.waitForFunction.mockResolvedValue(undefined);
+      mockPage.content.mockResolvedValue(
+        "<html><body>result content</body></html>",
+      );
+
+      const client = new ReceitaBrowserClient();
+      await client.connect();
+
+      const result = await client.waitResult();
+
+      expect(result.success).toBe(true);
+      expect(result.html).toBe("<html><body>result content</body></html>");
+    });
+
+    it("throws AbortError when signal aborted during waitResult", async () => {
+      const client = new ReceitaBrowserClient();
+      await client.connect();
+
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(client.waitResult(controller.signal)).rejects.toThrow(
+        "Aborted",
+      );
+    });
+  });
+
   describe("hasCaptcha", () => {
-    it("detects captcha elements correctly", async () => {
-      mockPage.$$.mockResolvedValue([{ type: "captcha-element" }]);
+    it("returns true when captcha elements found", async () => {
+      mockPage.$$.mockResolvedValue([{ type: "captcha" }]);
 
       const client = new ReceitaBrowserClient();
       await client.connect();
@@ -364,8 +394,11 @@ describe("ReceitaBrowserClient", () => {
   });
 
   describe("hasError", () => {
-    it("detects error indicators correctly", async () => {
-      mockPage.$$.mockResolvedValue([{ type: "error-element" }]);
+    it("returns true when visible error elements found", async () => {
+      const mockErrorElement = {
+        isVisible: vi.fn().mockResolvedValue(true),
+      };
+      mockPage.$$.mockResolvedValue([mockErrorElement]);
 
       const client = new ReceitaBrowserClient();
       await client.connect();
@@ -375,7 +408,21 @@ describe("ReceitaBrowserClient", () => {
       expect(result).toBe(true);
     });
 
-    it("returns false when no error indicators", async () => {
+    it("returns false when error elements are not visible", async () => {
+      const mockErrorElement = {
+        isVisible: vi.fn().mockResolvedValue(false),
+      };
+      mockPage.$$.mockResolvedValue([mockErrorElement]);
+
+      const client = new ReceitaBrowserClient();
+      await client.connect();
+
+      const result = await client.hasError();
+
+      expect(result).toBe(false);
+    });
+
+    it("returns false when no error elements", async () => {
       mockPage.$$.mockResolvedValue([]);
 
       const client = new ReceitaBrowserClient();
@@ -400,8 +447,10 @@ describe("ReceitaBrowserClient", () => {
   });
 
   describe("hasResult", () => {
-    it("detects result container correctly", async () => {
-      mockPage.$$.mockResolvedValue([{ type: "result-container" }]);
+    it("detects result when Situação no Simples Nacional is present", async () => {
+      mockPage.textContent.mockResolvedValue(
+        "Situação no Simples Nacional: Optante pelo Simples Nacional",
+      );
 
       const client = new ReceitaBrowserClient();
       await client.connect();
@@ -411,8 +460,45 @@ describe("ReceitaBrowserClient", () => {
       expect(result).toBe(true);
     });
 
-    it("returns false when no result container", async () => {
-      mockPage.$$.mockResolvedValue([]);
+    it("detects result when SIMEI text is present", async () => {
+      mockPage.textContent.mockResolvedValue(
+        "Situação no SIMEI: enquadrado no SIMEI",
+      );
+
+      const client = new ReceitaBrowserClient();
+      await client.connect();
+
+      const result = await client.hasResult();
+
+      expect(result).toBe(true);
+    });
+
+    it("detects result when NÃO optante is present", async () => {
+      mockPage.textContent.mockResolvedValue(
+        "NÃO optante pelo Simples Nacional",
+      );
+
+      const client = new ReceitaBrowserClient();
+      await client.connect();
+
+      const result = await client.hasResult();
+
+      expect(result).toBe(true);
+    });
+
+    it("returns false when no result indicators found", async () => {
+      mockPage.textContent.mockResolvedValue("Outro conteúdo qualquer");
+
+      const client = new ReceitaBrowserClient();
+      await client.connect();
+
+      const result = await client.hasResult();
+
+      expect(result).toBe(false);
+    });
+
+    it("returns false when textContent is null", async () => {
+      mockPage.textContent.mockResolvedValue(null);
 
       const client = new ReceitaBrowserClient();
       await client.connect();

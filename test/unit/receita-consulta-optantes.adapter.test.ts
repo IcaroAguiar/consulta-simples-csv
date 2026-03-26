@@ -214,7 +214,7 @@ describe("ReceitaConsultaOptantesAdapter", () => {
   });
 
   it("calls parser with correct parameters", async () => {
-    const testHtml = "<html><body>Optante Simples Nacional</body></html>";
+    const testHtml = "<html><body>Optante pelo Simples Nacional</body></html>";
     mockClient.waitResult.mockResolvedValue({ success: true, html: testHtml });
     mockClient.hasCaptcha.mockResolvedValue(false);
     mockClient.hasError.mockResolvedValue(false);
@@ -242,14 +242,15 @@ describe("ReceitaConsultaOptantesAdapter", () => {
     expect(result.message).toContain("CAPTCHA");
   });
 
-  it("returns SUCCESS when result is parsed successfully", async () => {
+  it("returns SUCCESS when result is parsed successfully (optante)", async () => {
     const successHtml = `
       <html>
         <body>
-          <table>
-            <tr><td>Simples Nacional</td><td>Optante</td></tr>
-            <tr><td>SIMEI</td><td>Não Optante</td></tr>
-          </table>
+          <div>
+            Situação no Simples Nacional: <span class="spanValorVerde">Optante pelo Simples Nacional</span>
+            <br>
+            Situação no SIMEI: <span class="spanValorVerde">NÃO enquadrado no SIMEI</span>
+          </div>
         </body>
       </html>
     `;
@@ -268,5 +269,57 @@ describe("ReceitaConsultaOptantesAdapter", () => {
     expect(result.status).toBe("SUCCESS");
     expect(result.simplesNacional).toBe(true);
     expect(result.simei).toBe(false);
+  });
+
+  it("returns SUCCESS when result is parsed successfully (não optante)", async () => {
+    const notOptanteHtml = `
+      <html>
+        <body>
+          <div>
+            Situação no Simples Nacional: <span class="spanValorVerde">NÃO optante pelo Simples Nacional</span>
+            <br>
+            Situação no SIMEI: <span class="spanValorVerde">NÃO enquadrado no SIMEI</span>
+          </div>
+        </body>
+      </html>
+    `;
+    mockClient.waitResult.mockResolvedValue({
+      success: true,
+      html: notOptanteHtml,
+    });
+    mockClient.hasCaptcha.mockResolvedValue(false);
+    mockClient.hasError.mockResolvedValue(false);
+    mockClient.hasResult.mockResolvedValue(true);
+
+    const adapter = new ReceitaConsultaOptantesAdapter();
+
+    const result = await adapter.lookup("47.960.950/0001-21");
+
+    expect(result.status).toBe("SUCCESS");
+    expect(result.simplesNacional).toBe(false);
+    expect(result.simei).toBe(false);
+  });
+
+  it("returns NOT_FOUND when not found message is present", async () => {
+    const notFoundHtml = `
+      <html>
+        <body>
+          <div>Não foi encontrado nenhum resultado.</div>
+        </body>
+      </html>
+    `;
+    mockClient.waitResult.mockResolvedValue({
+      success: true,
+      html: notFoundHtml,
+    });
+    mockClient.hasCaptcha.mockResolvedValue(false);
+    mockClient.hasError.mockResolvedValue(false);
+    mockClient.hasResult.mockResolvedValue(true);
+
+    const adapter = new ReceitaConsultaOptantesAdapter();
+
+    const result = await adapter.lookup("00.000.000/0001-91");
+
+    expect(result.status).toBe("NOT_FOUND");
   });
 });

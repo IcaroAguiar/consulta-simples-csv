@@ -1,27 +1,29 @@
 export const RECEITA_SELECTORS = {
-  url: "https://www8.receita.fazenda.gov.br/SimplesNacional/Servicos/ConsultaOptantes.aspx",
-  // Campo de busca no header - name attribute é usado
-  cnpjInput: 'input[name="ctl00$txtBusca"]',
-  // Botão de busca - usa __doPostBack
-  submitButton: 'button[aria-label="Pesquisar"]',
-  // CAPTCHA não detectado na consulta inicial
+  // URL correta do IFRAME de consulta
+  url: "https://www8.receita.fazenda.gov.br/SimplesNacional/Aplicacoes/ATBHE/ConsultaOptantes.app/ConsultarOpcao.html",
+  // Campo CNPJ - ID específico
+  cnpjInput: "#Cnpj",
+  // Submit - pode usar Enter ou botão submit
+  submitButton: 'input[type="submit"]',
+  // CAPTCHA - específico para imagens
   captcha:
-    '[class*="captcha" i], [id*="captcha" i], img[src*="captcha" i], iframe[src*="captcha" i]',
-  // Container de resultado - USA ID, não classe
-  resultContainer: '#resultado-busca',
+    'img[src*="captcha" i], input[name*="captcha" i], input[id*="captcha" i], .captcha-container, #captcha',
+  // Container de resultado
+  resultContainer: "body",
   // Mensagem de erro/não encontrado
-  errorMessage: '#ctl00_ContentPlaceHolder_lblMsg',
-  // Indicadores de erro no texto
-  errorIndicators:
-    '[class*="erro" i], [class*="error" i], :text("inválido"), :text("incorreto"), :text("não encontrado")',
+  errorMessage: ".alert-danger, .erro, .text-danger",
 } as const;
 
 export const RECEITA_TEXT_INDICATORS = {
-  simplesNacionalOptant: ["Optante", "Simples Nacional"],
-  simeiOptant: ["SIMEI", "Microempreendedor Individual"],
-  notOptant: ["Não Optante", "não optante"],
+  // Optante pelo Simples Nacional
+  simplesNacionalOptant: ["Optante pelo Simples Nacional"],
+  simplesNacionalNotOptant: ["NÃO optante pelo Simples Nacional"],
+  // SIMEI
+  simeiOptant: ["Enquadrado no SIMEI", "Optante pelo SIMEI"],
+  simeiNotOptant: ["NÃO enquadrado no SIMEI"],
+  // Erros - detectados via texto, não CSS
   captcha: ["captcha", "Captcha", "CAPTCHA"],
   blocked: ["bloqueado", "blocked", "acesso negado"],
-  invalidCnpj: ["CNPJ inválido", "CNPJ incorreto"],
-  notFound: ["Não foi encontrado nenhum resultado", "nenhum resultado"],
+  invalidCnpj: ["CNPJ inválido", "CNPJ incorreto", "cnpj inválido"],
+  notFound: ["Não foi encontrado", "nenhum resultado"],
 } as const;

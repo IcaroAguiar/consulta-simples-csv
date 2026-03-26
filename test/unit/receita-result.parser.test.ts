@@ -2,16 +2,29 @@ import { describe, expect, it } from "vitest";
 
 import { parseReceitaResult } from "../../src/core/simples/adapters/receita-web/receita-result.parser";
 
-const createSuccessHtml = (optant: boolean, simei: boolean): string => `
+// HTML real da Receita (simplificado)
+const createSuccessHtml = (simplesNacional: boolean, simei: boolean): string => `
 <!DOCTYPE html>
 <html>
 <body>
-  <div class="resultado">
-    <h2>Consulta Optantes</h2>
-    <table>
-      <tr><td>Simples Nacional</td><td>${optant ? "Optante" : "Não Optante"}</td></tr>
-      <tr><td>SIMEI</td><td>${simei ? "Optante" : "Não Optante"}</td></tr>
-    </table>
+  <div>
+    <h4>Consulta Optantes</h4>
+    <span style="font-size:small;color:gray">A opção pelo Simples Nacional e/ou SIMEI abrange todos os estabelecimentos da empresa</span>
+    <br>
+    Situação no Simples Nacional: <span class="spanValorVerde">${simplesNacional ? "Optante pelo Simples Nacional" : "NÃO optante pelo Simples Nacional"}</span>
+    <br>
+    Situação no SIMEI: <span class="spanValorVerde">${simei ? "Enquadrado no SIMEI" : "NÃO enquadrado no SIMEI"}</span>
+  </div>
+</body>
+</html>
+`;
+
+const createNotFoundHtml = (): string => `
+<!DOCTYPE html>
+<html>
+<body>
+  <div>
+    <p>Não foi encontrado nenhum resultado.</p>
   </div>
 </body>
 </html>
@@ -22,7 +35,7 @@ const createCaptchaHtml = (): string => `
 <html>
 <body>
   <div class="captcha-container">
-    <img src="/captcha/image.jpg" alt="CAPTCHA" />
+    <img src="/captcha.jpg" alt="CAPTCHA" />
     <input type="text" name="captcha" />
   </div>
 </body>
@@ -33,7 +46,7 @@ const createBlockedHtml = (): string => `
 <!DOCTYPE html>
 <html>
 <body>
-  <div class="error-container">
+  <div>
     <h1>Acesso Bloqueado</h1>
     <p>Seu IP foi bloqueado temporariamente.</p>
   </div>
@@ -45,7 +58,7 @@ const createInvalidCnpjHtml = (): string => `
 <!DOCTYPE html>
 <html>
 <body>
-  <div class="error-container">
+  <div>
     <h1>CNPJ Inválido</h1>
     <p>O CNPJ informado é inválido ou incorreto.</p>
   </div>
@@ -53,11 +66,11 @@ const createInvalidCnpjHtml = (): string => `
 </html>
 `;
 
-const createTemporaryErrorHtml = (): string => `
+const createErrorHtml = (): string => `
 <!DOCTYPE html>
 <html>
 <body>
-  <div class="error-container">
+  <div>
     <h1>Erro Temporário</h1>
     <p>Serviço temporariamente indisponível.</p>
   </div>
@@ -65,19 +78,8 @@ const createTemporaryErrorHtml = (): string => `
 </html>
 `;
 
-const createUnparsableHtml = (): string => `
-<!DOCTYPE html>
-<html>
-<body>
-  <div>
-    <p>Conteúdo não reconhecido.</p>
-  </div>
-</body>
-</html>
-`;
-
 describe("parseReceitaResult", () => {
-  const validCnpj = "00000000000191";
+  const validCnpj = "47960950000121";
 
   describe("SUCCESS cases", () => {
     it("returns SUCCESS when both Simples Nacional and SIMEI are optant", () => {
@@ -118,7 +120,7 @@ describe("parseReceitaResult", () => {
       });
     });
 
-    it("returns SUCCESS when neither is optant", () => {
+    it("returns SUCCESS when both are not optant", () => {
       const html = createSuccessHtml(false, false);
       const result = parseReceitaResult({
         html,
@@ -134,6 +136,53 @@ describe("parseReceitaResult", () => {
         simei: false,
         source: "receita-web",
         status: "SUCCESS",
+      });
+    });
+
+    it("returns SUCCESS with null valores when only Simples Nacional is found", () => {
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <body>
+          Situação no Simples Nacional: <span>Optante pelo Simples Nacional</span>
+        </body>
+        </html>
+      `;
+      const result = parseReceitaResult({
+        html,
+        cnpj: validCnpj,
+        hasCaptcha: false,
+        hasError: false,
+        hasResult: true,
+      });
+
+      expect(result).toMatchObject({
+        cnpj: validCnpj,
+        simplesNacional: true,
+        simei: null,
+        source: "receita-web",
+        status: "SUCCESS",
+      });
+    });
+  });
+
+  describe("NOT_FOUND case", () => {
+    it("returns NOT_FOUND when not found indicators are present", () => {
+      const html = createNotFoundHtml();
+      const result = parseReceitaResult({
+        html,
+        cnpj: validCnpj,
+        hasCaptcha: false,
+        hasError: false,
+        hasResult: true,
+      });
+
+      expect(result).toMatchObject({
+        cnpj: validCnpj,
+        simplesNacional: null,
+        simei: null,
+        source: "receita-web",
+        status: "NOT_FOUND",
       });
     });
   });
@@ -203,7 +252,7 @@ describe("parseReceitaResult", () => {
 
   describe("TEMPORARY_ERROR case", () => {
     it("returns TEMPORARY_ERROR when error is detected but no specific indicators", () => {
-      const html = createTemporaryErrorHtml();
+      const html = createErrorHtml();
       const result = parseReceitaResult({
         html,
         cnpj: validCnpj,
@@ -213,7 +262,7 @@ describe("parseReceitaResult", () => {
       });
 
       expect(result).toMatchObject({
-        cnpj: validCnpj,
+        cnpj:validCnpj,
         simplesNacional: null,
         simei: null,
         source: "receita-web",
@@ -223,33 +272,12 @@ describe("parseReceitaResult", () => {
   });
 
   describe("UNPARSABLE_RESULT case", () => {
-    it("returns UNPARSABLE_RESULT when no result or error is detected", () => {
-      const html = createUnparsableHtml();
-      const result = parseReceitaResult({
-        html,
-        cnpj: validCnpj,
-        hasCaptcha: false,
-        hasError: false,
-        hasResult: false,
-      });
-
-      expect(result).toMatchObject({
-        cnpj: validCnpj,
-        simplesNacional: null,
-        simei: null,
-        source: "receita-web",
-        status: "UNPARSABLE_RESULT",
-      });
-    });
-
-    it("returns UNPARSABLE_RESULT when result container exists but no optant status", () => {
+    it("returns UNPARSABLE_RESULT when no structure is recognized", () => {
       const html = `
         <!DOCTYPE html>
         <html>
         <body>
-          <div class="resultado">
-            <p>Resultado semformatação conhecida</p>
-          </div>
+          <p>Conteúdo não reconhecido.</p>
         </body>
         </html>
       `;
@@ -258,7 +286,7 @@ describe("parseReceitaResult", () => {
         cnpj: validCnpj,
         hasCaptcha: false,
         hasError: false,
-        hasResult: true,
+        hasResult: false,
       });
 
       expect(result).toMatchObject({

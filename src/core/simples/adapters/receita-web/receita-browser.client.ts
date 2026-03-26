@@ -75,7 +75,12 @@ export class ReceitaBrowserClient {
 
     try {
       await this.page.goto(RECEITA_SELECTORS.url, {
-        waitUntil: "networkidle",
+        waitUntil: "domcontentloaded",
+        timeout: this.timeout,
+      });
+
+      // Aguardar o campo CNPJ aparecer
+      await this.page.waitForSelector(RECEITA_SELECTORS.cnpjInput, {
         timeout: this.timeout,
       });
 
@@ -137,6 +142,7 @@ export class ReceitaBrowserClient {
       if (submitButton) {
         await submitButton.click();
       } else {
+        // Se não houver botão, pressionar Enter no campo CNPJ
         const cnpjInput = await this.page.$(RECEITA_SELECTORS.cnpjInput);
         if (cnpjInput) {
           await cnpjInput.press("Enter");
@@ -162,7 +168,25 @@ export class ReceitaBrowserClient {
     }
 
     try {
-      await this.page.waitForTimeout(3000);
+      // Aguardar a página de resultado carregar
+      await this.page.waitForTimeout(5000);
+
+      // Aguardar indicadores de resultado aparecerem
+      try {
+        await this.page.waitForFunction(
+          () => {
+            const body = document.body.textContent || "";
+            return (
+              body.includes("Situação no Simples Nacional") ||
+              body.includes("Não foi encontrado") ||
+              body.includes("CNPJ:")
+            );
+          },
+          { timeout: 15000 },
+        );
+      } catch {
+        // Continuar mesmo se não encontrar indicadores
+      }
 
       const html = await this.page.content();
 
@@ -201,10 +225,18 @@ export class ReceitaBrowserClient {
     }
 
     try {
-      const errorElements = await this.page.$$(
-        RECEITA_SELECTORS.errorIndicators,
-      );
-      return errorElements.length > 0;
+      // Verificar se há elementos de erro VISIBLE
+      const errorElements = await this.page.$$(RECEITA_SELECTORS.errorMessage);
+      
+      // Filtrar apenas elementos visíveis
+      for (const el of errorElements) {
+        const isVisible = await el.isVisible();
+        if (isVisible) {
+          return true;
+        }
+      }
+      
+      return false;
     } catch {
       return false;
     }
@@ -220,10 +252,16 @@ export class ReceitaBrowserClient {
     }
 
     try {
-      const resultContainers = await this.page.$$(
-        RECEITA_SELECTORS.resultContainer,
+      const bodyText = await this.page.textContent("body");
+      if (!bodyText) return false;
+
+      // Verificar se há indicadores de resultado específicos
+      return (
+        bodyText.includes("Situação no Simples Nacional") ||
+        bodyText.includes("Optante pelo Simples Nacional") ||
+        bodyText.includes("NÃO optante") ||
+        bodyText.includes("enquadrado no SIMEI")
       );
-      return resultContainers.length > 0;
     } catch {
       return false;
     }
