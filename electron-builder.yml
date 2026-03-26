@@ -7,6 +7,13 @@ files:
   - dist-electron/**
   - package.json
 asar: true
+asarUnpack:
+  - "node_modules/playwright-core/**/*"
+extraResources:
+  - from: "node_modules/playwright-core/.local-browsers"
+    to: "browsers"
+    filter:
+      - "**/*"
 mac:
   target:
     - dmg
@@ -17,4 +24,3 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
-

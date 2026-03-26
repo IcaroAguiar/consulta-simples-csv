@@ -5,6 +5,7 @@ import { RECEITA_SELECTORS } from "./receita.selectors.js";
 export type ReceitaBrowserClientOptions = {
   timeout?: number;
   headless?: boolean;
+  executablePath?: string;
 };
 
 export type ReceitaNavigationResult = {
@@ -20,9 +21,12 @@ export class ReceitaBrowserClient {
 
   private readonly headless: boolean;
 
+  private readonly executablePath: string | undefined;
+
   constructor(options: ReceitaBrowserClientOptions = {}) {
     this.timeout = options.timeout ?? 30000;
     this.headless = options.headless ?? true;
+    this.executablePath = options.executablePath;
   }
 
   async connect(signal?: AbortSignal): Promise<void> {
@@ -30,10 +34,16 @@ export class ReceitaBrowserClient {
       throw new DOMException("Aborted", "AbortError");
     }
 
-    const browser = await chromium.launch({
+    const launchOptions: Parameters<typeof chromium.launch>[0] = {
       headless: this.headless,
       args: ["--disable-blink-features=AutomationControlled"],
-    });
+    };
+
+    if (this.executablePath) {
+      launchOptions.executablePath = this.executablePath;
+    }
+
+    const browser = await chromium.launch(launchOptions);
 
     const context = await browser.newContext({
       userAgent:

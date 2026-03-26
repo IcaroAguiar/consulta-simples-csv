@@ -14,19 +14,23 @@
     "build": "pnpm build:renderer && pnpm build:main",
     "build:renderer": "vite build",
     "build:main": "tsup src/main/main.ts src/main/preload.ts --format cjs --out-dir dist-electron --external electron --external playwright --external playwright-core",
+    "build:browser": "npx playwright install chromium",
+    "postinstall": "npx playwright install chromium",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "dist:mac": "pnpm build && electron-builder --mac dmg",
-    "dist:win": "pnpm build && electron-builder --win nsis --publish never",
+    "dist:mac": "pnpm build && pnpm build:browser && electron-builder --mac dmg",
+    "dist:win": "pnpm build && pnpm build:browser && electron-builder --win nsis --publish never",
     "dist:dir": "pnpm build && electron-builder --dir",
     "repair:electron": "pnpm rebuild electron esbuild",
     "start": "electron ."
   },
   "dependencies": {
     "csv-parse": "^6.1.0",
-    "csv-stringify": "^6.6.0"
+    "csv-stringify": "^6.6.0",
+    "playwright": "^1.58.2",
+    "playwright-core": "^1.58.2"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.4",
@@ -35,7 +39,6 @@
     "electron": "^38.3.0",
     "electron-builder": "^26.0.12",
     "electronmon": "^2.0.3",
-    "playwright": "^1.58.2",
     "tsup": "^8.5.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",

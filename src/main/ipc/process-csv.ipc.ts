@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { app, BrowserWindow, dialog, ipcMain, powerSaveBlocker } from "electron";
+import { BrowserWindow, dialog, ipcMain, powerSaveBlocker } from "electron";
 
 import { processCsv } from "../../core/app/process-csv.use-case";
 import type { SimplesProviderName } from "../../core/simples/simples-provider.factory";
@@ -67,14 +67,6 @@ export function registerCsvIpc(): void {
       throw new Error("Ja existe um processamento em andamento.");
     }
 
-    if (app.isPackaged && input.provider === "receita-web") {
-      throw new Error(
-        "O provider 'receita-web' não está disponível em produção. " +
-        "Use 'mock' para testes locais ou 'cnpja-open' para consultas reais. " +
-        "O Playwright requer ambiente de desenvolvimento para funcionar."
-      );
-    }
-
     const provider = createSimplesLookupProvider(input.provider);
     const options = input.cnpjColumn?.trim();
     const controller = new AbortController();
@@ -132,16 +124,18 @@ export function registerCsvIpc(): void {
       if (autoSaveResult.savedPath && result.runStatus === "SUCCESS") {
         const mainWindow = getMainWindow();
         if (mainWindow) {
-          dialog.showMessageBox(mainWindow, {
-            type: "info",
-            title: "Processamento concluído",
-            message: "Arquivo salvo com sucesso!",
-            detail: `O arquivo foi salvo em:\n${autoSaveResult.savedPath}`,
-            buttons: ["OK"],
-            defaultId: 0,
-          }).catch(() => {
-            // Ignora erros do diálogo
-          });
+          dialog
+            .showMessageBox(mainWindow, {
+              type: "info",
+              title: "Processamento concluído",
+              message: "Arquivo salvo com sucesso!",
+              detail: `O arquivo foi salvo em:\n${autoSaveResult.savedPath}`,
+              buttons: ["OK"],
+              defaultId: 0,
+            })
+            .catch(() => {
+              // Ignora erros do diálogo
+            });
         }
       }
 
@@ -246,10 +240,6 @@ function normalizeProvider(value: string | undefined): SimplesProviderName {
   }
 
   if (value === "receita-web") {
-    // Em produção, receita-web não está disponível, usa mock como fallback
-    if (app.isPackaged) {
-      return "mock";
-    }
     return "receita-web";
   }
 
