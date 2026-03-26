@@ -300,7 +300,7 @@ describe("ReceitaBrowserClient", () => {
         press: vi.fn().mockResolvedValue(undefined),
       };
       mockPage.$.mockImplementation(async (selector: string) => {
-        if (selector.includes("submit")) {
+        if (selector.includes("Pesquisar") || selector.includes("submit")) {
           return null;
         }
         return mockCnpjInput;
