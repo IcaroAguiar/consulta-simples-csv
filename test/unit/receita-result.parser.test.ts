@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import { parseReceitaResult } from "../../src/core/simples/adapters/receita-web/receita-result.parser";
 
 // HTML real da Receita (simplificado)
-const createSuccessHtml = (simplesNacional: boolean, simei: boolean): string => `
+const createSuccessHtml = (
+  simplesNacional: boolean,
+  simei: boolean,
+): string => `
 <!DOCTYPE html>
 <html>
 <body>
@@ -262,7 +265,7 @@ describe("parseReceitaResult", () => {
       });
 
       expect(result).toMatchObject({
-        cnpj:validCnpj,
+        cnpj: validCnpj,
         simplesNacional: null,
         simei: null,
         source: "receita-web",

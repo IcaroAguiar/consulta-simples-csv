@@ -25,6 +25,7 @@ const mockPage = {
 const mockContext = {
   newPage: vi.fn(),
   browser: vi.fn(),
+  close: vi.fn(),
 };
 
 const mockBrowser = {
@@ -39,6 +40,7 @@ describe("ReceitaBrowserClient", () => {
     mockBrowser.newContext.mockResolvedValue(mockContext);
     mockContext.newPage.mockResolvedValue(mockPage);
     mockContext.browser.mockReturnValue(mockBrowser);
+    mockContext.close.mockResolvedValue(undefined);
     mockPage.close.mockResolvedValue(undefined);
     mockBrowser.close.mockResolvedValue(undefined);
     vi.mocked(chromium.launch).mockResolvedValue(
@@ -108,6 +110,17 @@ describe("ReceitaBrowserClient", () => {
       await expect(client.connect(controller.signal)).rejects.toThrow(
         "Aborted",
       );
+    });
+
+    it("cleans up the browser when connect fails after launch", async () => {
+      mockContext.newPage.mockRejectedValue(new Error("newPage failed"));
+
+      const client = new ReceitaBrowserClient();
+
+      await expect(client.connect()).rejects.toThrow("newPage failed");
+
+      expect(mockContext.close).toHaveBeenCalledTimes(1);
+      expect(mockBrowser.close).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -191,7 +204,10 @@ describe("ReceitaBrowserClient", () => {
       expect(result.error).toBeUndefined();
       expect(mockPage.goto).toHaveBeenCalledWith(
         expect.stringContaining("receita.fazenda.gov.br"),
-        expect.objectContaining({ waitUntil: "domcontentloaded", timeout: 5000 }),
+        expect.objectContaining({
+          waitUntil: "domcontentloaded",
+          timeout: 5000,
+        }),
       );
       expect(mockPage.waitForSelector).toHaveBeenCalledWith(
         "#Cnpj",
@@ -345,15 +361,18 @@ describe("ReceitaBrowserClient", () => {
     });
 
     it("throws AbortError when signal aborted during waitResult", async () => {
+      mockPage.waitForTimeout.mockImplementation(
+        () => new Promise<void>(() => {}),
+      );
+
       const client = new ReceitaBrowserClient();
       await client.connect();
 
       const controller = new AbortController();
+      const waitPromise = client.waitResult(controller.signal);
       controller.abort();
 
-      await expect(client.waitResult(controller.signal)).rejects.toThrow(
-        "Aborted",
-      );
+      await expect(waitPromise).rejects.toThrow("Aborted");
     });
   });
 

@@ -1,4 +1,4 @@
-import type { Page } from "playwright";
+import type { Browser, BrowserContext, Page } from "playwright";
 import { chromium } from "playwright";
 import { RECEITA_SELECTORS } from "./receita.selectors.js";
 
@@ -14,7 +14,43 @@ export type ReceitaNavigationResult = {
   error?: string;
 };
 
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new DOMException("Aborted", "AbortError");
+  }
+}
+
+async function raceWithAbort<T>(
+  promise: Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  throwIfAborted(signal);
+
+  if (!signal) {
+    return promise;
+  }
+
+  return await Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      const onAbort = () => {
+        signal.removeEventListener("abort", onAbort);
+        reject(new DOMException("Aborted", "AbortError"));
+      };
+
+      signal.addEventListener("abort", onAbort, { once: true });
+      void promise.finally(() => {
+        signal.removeEventListener("abort", onAbort);
+      });
+    }),
+  ]);
+}
+
 export class ReceitaBrowserClient {
+  private browser: Browser | null = null;
+
+  private context: BrowserContext | null = null;
+
   private page: Page | null = null;
 
   private readonly timeout: number;
@@ -30,9 +66,7 @@ export class ReceitaBrowserClient {
   }
 
   async connect(signal?: AbortSignal): Promise<void> {
-    if (signal?.aborted) {
-      throw new DOMException("Aborted", "AbortError");
-    }
+    throwIfAborted(signal);
 
     const launchOptions: Parameters<typeof chromium.launch>[0] = {
       headless: this.headless,
@@ -43,25 +77,51 @@ export class ReceitaBrowserClient {
       launchOptions.executablePath = this.executablePath;
     }
 
-    const browser = await chromium.launch(launchOptions);
+    let browser: Browser | null = null;
+    let context: BrowserContext | null = null;
 
-    const context = await browser.newContext({
-      userAgent:
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    });
+    try {
+      browser = await chromium.launch(launchOptions);
+      context = await browser.newContext({
+        userAgent:
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      });
 
-    this.page = await context.newPage();
+      this.browser = browser;
+      this.context = context;
+      this.page = await context.newPage();
+    } catch (error) {
+      if (context) {
+        await context.close().catch(() => {});
+      }
+
+      if (browser) {
+        await browser.close().catch(() => {});
+      }
+
+      this.browser = null;
+      this.context = null;
+      this.page = null;
+      throw error;
+    }
   }
 
   async disconnect(): Promise<void> {
     if (this.page) {
-      const browser = this.page.context().browser();
-      await this.page.close();
-      if (browser) {
-        await browser.close();
-      }
-      this.page = null;
+      await this.page.close().catch(() => {});
     }
+
+    if (this.context) {
+      await this.context.close().catch(() => {});
+    }
+
+    if (this.browser) {
+      await this.browser.close().catch(() => {});
+    }
+
+    this.page = null;
+    this.context = null;
+    this.browser = null;
   }
 
   async navigate(signal?: AbortSignal): Promise<ReceitaNavigationResult> {
@@ -69,25 +129,33 @@ export class ReceitaBrowserClient {
       return { success: false, html: "", error: "Browser not connected" };
     }
 
-    if (signal?.aborted) {
-      throw new DOMException("Aborted", "AbortError");
-    }
+    throwIfAborted(signal);
 
     try {
-      await this.page.goto(RECEITA_SELECTORS.url, {
-        waitUntil: "domcontentloaded",
-        timeout: this.timeout,
-      });
+      await raceWithAbort(
+        this.page.goto(RECEITA_SELECTORS.url, {
+          waitUntil: "domcontentloaded",
+          timeout: this.timeout,
+        }),
+        signal,
+      );
 
       // Aguardar o campo CNPJ aparecer
-      await this.page.waitForSelector(RECEITA_SELECTORS.cnpjInput, {
-        timeout: this.timeout,
-      });
+      await raceWithAbort(
+        this.page.waitForSelector(RECEITA_SELECTORS.cnpjInput, {
+          timeout: this.timeout,
+        }),
+        signal,
+      );
 
       const html = await this.page.content();
 
       return { success: true, html };
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw error;
+      }
+
       const message =
         error instanceof Error ? error.message : "Navigation failed";
       return { success: false, html: "", error: message };
@@ -102,9 +170,7 @@ export class ReceitaBrowserClient {
       return { success: false, html: "", error: "Browser not connected" };
     }
 
-    if (signal?.aborted) {
-      throw new DOMException("Aborted", "AbortError");
-    }
+    throwIfAborted(signal);
 
     try {
       const cnpjInput = await this.page.$(RECEITA_SELECTORS.cnpjInput);
@@ -115,12 +181,16 @@ export class ReceitaBrowserClient {
 
       await cnpjInput.fill("");
       await cnpjInput.fill(cnpj);
-      await this.page.waitForTimeout(500);
+      await raceWithAbort(this.page.waitForTimeout(500), signal);
 
       const html = await this.page.content();
 
       return { success: true, html };
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw error;
+      }
+
       const message =
         error instanceof Error ? error.message : "Fill CNPJ failed";
       return { success: false, html: "", error: message };
@@ -132,9 +202,7 @@ export class ReceitaBrowserClient {
       return { success: false, html: "", error: "Browser not connected" };
     }
 
-    if (signal?.aborted) {
-      throw new DOMException("Aborted", "AbortError");
-    }
+    throwIfAborted(signal);
 
     try {
       const submitButton = await this.page.$(RECEITA_SELECTORS.submitButton);
@@ -153,6 +221,10 @@ export class ReceitaBrowserClient {
 
       return { success: true, html };
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw error;
+      }
+
       const message = error instanceof Error ? error.message : "Submit failed";
       return { success: false, html: "", error: message };
     }
@@ -163,26 +235,27 @@ export class ReceitaBrowserClient {
       return { success: false, html: "", error: "Browser not connected" };
     }
 
-    if (signal?.aborted) {
-      throw new DOMException("Aborted", "AbortError");
-    }
+    throwIfAborted(signal);
 
     try {
       // Aguardar a página de resultado carregar
-      await this.page.waitForTimeout(5000);
+      await raceWithAbort(this.page.waitForTimeout(5000), signal);
 
       // Aguardar indicadores de resultado aparecerem
       try {
-        await this.page.waitForFunction(
-          () => {
-            const body = document.body.textContent || "";
-            return (
-              body.includes("Situação no Simples Nacional") ||
-              body.includes("Não foi encontrado") ||
-              body.includes("CNPJ:")
-            );
-          },
-          { timeout: 15000 },
+        await raceWithAbort(
+          this.page.waitForFunction(
+            () => {
+              const body = document.body.textContent || "";
+              return (
+                body.includes("Situação no Simples Nacional") ||
+                body.includes("Não foi encontrado") ||
+                body.includes("CNPJ:")
+              );
+            },
+            { timeout: 15000 },
+          ),
+          signal,
         );
       } catch {
         // Continuar mesmo se não encontrar indicadores
@@ -192,6 +265,10 @@ export class ReceitaBrowserClient {
 
       return { success: true, html };
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw error;
+      }
+
       const message =
         error instanceof Error ? error.message : "Wait result failed";
       return { success: false, html: "", error: message };
@@ -203,9 +280,7 @@ export class ReceitaBrowserClient {
       return false;
     }
 
-    if (signal?.aborted) {
-      throw new DOMException("Aborted", "AbortError");
-    }
+    throwIfAborted(signal);
 
     try {
       const captchaElements = await this.page.$$(RECEITA_SELECTORS.captcha);
@@ -220,14 +295,12 @@ export class ReceitaBrowserClient {
       return false;
     }
 
-    if (signal?.aborted) {
-      throw new DOMException("Aborted", "AbortError");
-    }
+    throwIfAborted(signal);
 
     try {
       // Verificar se há elementos de erro VISIBLE
       const errorElements = await this.page.$$(RECEITA_SELECTORS.errorMessage);
-      
+
       // Filtrar apenas elementos visíveis
       for (const el of errorElements) {
         const isVisible = await el.isVisible();
@@ -235,7 +308,7 @@ export class ReceitaBrowserClient {
           return true;
         }
       }
-      
+
       return false;
     } catch {
       return false;
@@ -247,9 +320,7 @@ export class ReceitaBrowserClient {
       return false;
     }
 
-    if (signal?.aborted) {
-      throw new DOMException("Aborted", "AbortError");
-    }
+    throwIfAborted(signal);
 
     try {
       const bodyText = await this.page.textContent("body");

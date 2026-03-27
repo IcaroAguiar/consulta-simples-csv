@@ -25,6 +25,16 @@ type ProcessCsvResult = {
   runStatus: ProcessCsvRunStatus;
 };
 
+const ERROR_STATUSES = new Set<SimplesLookupResult["status"]>([
+  "INVALID_CNPJ",
+  "NOT_FOUND",
+  "TEMPORARY_ERROR",
+  "PERMANENT_ERROR",
+  "BLOCKED",
+  "CAPTCHA_REQUIRED",
+  "UNPARSABLE_RESULT",
+]);
+
 export async function processCsv(
   inputCsv: string,
   provider: SimplesLookupPort,
@@ -176,12 +186,8 @@ export async function processCsv(
       totalCnpjsUnicosConsultados: lookupCache.size,
       totalOptantesSimples,
       totalNaoOptantesSimples,
-      totalErros: outputRows.filter(
-        (row) =>
-          row.status === "INVALID_CNPJ" ||
-          row.status === "NOT_FOUND" ||
-          row.status === "TEMPORARY_ERROR" ||
-          row.status === "PERMANENT_ERROR",
+      totalErros: outputRows.filter((row) =>
+        ERROR_STATUSES.has(row.status as SimplesLookupResult["status"]),
       ).length,
     },
     runStatus,

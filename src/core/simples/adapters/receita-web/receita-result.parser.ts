@@ -90,7 +90,7 @@ function classifyError(
 export function parseReceitaResult(
   input: ParseReceitaResultInput,
 ): SimplesLookupResult {
-  const { html, cnpj, hasCaptcha, hasError, hasResult } = input;
+  const { html, cnpj, hasCaptcha, hasError } = input;
 
   // 1. CAPTCHA detectado (imagem ou texto)
   if (hasCaptcha || containsText(html, RECEITA_TEXT_INDICATORS.captcha)) {
@@ -109,10 +109,7 @@ export function parseReceitaResult(
   const optantStatus = parseOptantStatus(html);
 
   // Se conseguiu extrair status de optante, retornar SUCCESS
-  if (
-    optantStatus.simplesNacional !== null ||
-    optantStatus.simei !== null
-  ) {
+  if (optantStatus.simplesNacional !== null || optantStatus.simei !== null) {
     return {
       cnpj,
       simplesNacional: optantStatus.simplesNacional,

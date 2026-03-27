@@ -1,8 +1,15 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { BrowserWindow, dialog, ipcMain, powerSaveBlocker } from "electron";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  powerSaveBlocker,
+} from "electron";
 
 import { processCsv } from "../../core/app/process-csv.use-case";
+import { loadProviderConfig } from "../../core/simples/simples-provider.config";
 import type { SimplesProviderName } from "../../core/simples/simples-provider.factory";
 import { createSimplesLookupProvider } from "../../core/simples/simples-provider.factory";
 
@@ -31,10 +38,11 @@ function getMainWindow(): BrowserWindow | undefined {
 
 export function registerCsvIpc(): void {
   ipcMain.handle("app:get-defaults", () => {
-    const provider = normalizeProvider(process.env.SIMPLES_PROVIDER);
+    const provider = resolveDefaultProvider();
 
     return {
       provider,
+      receitaWebAvailable: !app.isPackaged,
     };
   });
 
@@ -65,6 +73,13 @@ export function registerCsvIpc(): void {
   ipcMain.handle("csv:process", async (_event, input: ProcessCsvInput) => {
     if (activeProcessingSession) {
       throw new Error("Ja existe um processamento em andamento.");
+    }
+
+    if (app.isPackaged && input.provider === "receita-web") {
+      throw new Error(
+        "O provider assistido da Receita só está disponível em execução local. " +
+          "Use 'mock' para testes ou 'cnpja-open' para o fluxo principal.",
+      );
     }
 
     const provider = createSimplesLookupProvider(input.provider);
@@ -215,6 +230,10 @@ export function hasActiveProcessing(): boolean {
   return activeProcessingSession !== null;
 }
 
+export function resolveDefaultProvider(): SimplesProviderName {
+  return normalizeProvider(loadProviderConfig());
+}
+
 export function requestProcessingCancel(): boolean {
   if (!activeProcessingSession) {
     return false;
@@ -240,6 +259,10 @@ function normalizeProvider(value: string | undefined): SimplesProviderName {
   }
 
   if (value === "receita-web") {
+    if (app.isPackaged) {
+      return "mock";
+    }
+
     return "receita-web";
   }
 

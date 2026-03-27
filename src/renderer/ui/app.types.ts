@@ -31,7 +31,10 @@ export type AppBridge = {
   saveCsvFile(defaultName: string, content: string): Promise<string | null>;
   autoSaveCsvFile(sourceFilePath: string, content: string): Promise<string>;
   onLookupProgress(callback: (progress: LookupProgress) => void): () => void;
-  getDefaults(): Promise<{ provider: SimplesProviderName }>;
+  getDefaults(): Promise<{
+    provider: SimplesProviderName;
+    receitaWebAvailable: boolean;
+  }>;
 };
 
 declare global {
@@ -53,6 +56,7 @@ export type UiState = {
   filePath: string | null;
   content: string | null;
   provider: SimplesProviderName;
+  receitaWebAvailable: boolean;
   cnpjColumn: string;
   status: UiStatus;
   message: string;
@@ -69,6 +73,7 @@ export const initialState: UiState = {
   filePath: null,
   content: null,
   provider: "mock",
+  receitaWebAvailable: false,
   cnpjColumn: "",
   status: "idle",
   message: "Selecione um arquivo CSV para começar o processamento.",

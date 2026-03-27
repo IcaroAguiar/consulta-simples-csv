@@ -77,7 +77,13 @@ export function renderShell(state: UiState): string {
                     )
                   : "Nenhum arquivo selecionado"
               }</span>
-              <span class="command-bar__hint">${state.fileName ? `Provider: ${state.provider}` : "Selecione um CSV para continuar"}</span>
+              <span class="command-bar__hint">${
+                state.fileName
+                  ? state.provider === "receita-web"
+                    ? "Provider assistido: navegador visível e supervisão humana"
+                    : `Provider: ${state.provider}`
+                  : "Selecione um CSV para continuar"
+              }</span>
             </div>
             <div class="command-bar__actions">
               ${button({ variant: "ghost", "data-action": "pick-file", children: "Selecionar CSV" })}
@@ -91,13 +97,18 @@ export function renderShell(state: UiState): string {
             <label class="field" for="provider">
               <span class="field__label">
                 Provider
-                <span class="field__hint" title="mock: dados simulados, sem rede | cnpja-open: consulta real ao serviço">?</span>
+                <span class="field__hint" title="mock: dados simulados, sem rede | cnpja-open: consulta real ao serviço | receita-web: navegador visível e supervisão do usuário">?</span>
               </span>
               <select id="provider" data-field="provider">
                 <option value="mock" ${state.provider === "mock" ? "selected" : ""}>mock — dados simulados (offline)</option>
                 <option value="cnpja-open" ${state.provider === "cnpja-open" ? "selected" : ""}>cnpja-open — consulta real</option>
-                <option value="receita-web" ${state.provider === "receita-web" ? "selected" : ""}>receita-web — automação portal</option>
+                <option value="receita-web" ${state.provider === "receita-web" ? "selected" : ""}>receita-web — assistido (experimental)</option>
               </select>
+              ${
+                state.provider === "receita-web"
+                  ? '<span class="field__hint">Abre navegador visível, pode ser bloqueado por proteção anti-robô e exige supervisão humana em lotes grandes.</span>'
+                  : ""
+              }
             </label>
 
             <label class="field" for="cnpj-column">
@@ -152,6 +163,10 @@ export function renderShell(state: UiState): string {
             <div class="info-item">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
               Use <strong>mock</strong> para testar sem consumir API.
+            </div>
+            <div class="info-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 4v6c0 5-3.5 8-8 8s-8-3-8-8V7l8-4z"/><path d="M9 12l2 2 4-4"/></svg>
+              <strong>receita-web</strong> é assistido e experimental: funciona melhor com navegador visível e não deve ser tratado como automação sólida.
             </div>
             <div class="info-item">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>

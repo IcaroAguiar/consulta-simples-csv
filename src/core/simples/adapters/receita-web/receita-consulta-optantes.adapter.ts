@@ -11,7 +11,7 @@ export class ReceitaConsultaOptantesAdapter implements SimplesLookupPort {
     cnpj: string,
     options?: SimplesLookupOptions,
   ): Promise<SimplesLookupResult> {
-    const client = new ReceitaBrowserClient();
+    const client = new ReceitaBrowserClient({ headless: false });
 
     try {
       await client.connect(options?.signal);
@@ -75,6 +75,19 @@ export class ReceitaConsultaOptantesAdapter implements SimplesLookupPort {
         hasError,
         hasResult,
       });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return {
+          cnpj,
+          simplesNacional: null,
+          simei: null,
+          source: "system",
+          status: "CANCELLED",
+          message: "Processamento cancelado antes desta consulta",
+        };
+      }
+
+      throw error;
     } finally {
       await client.disconnect();
     }

@@ -62,6 +62,16 @@ describe("ReceitaConsultaOptantesAdapter", () => {
     expect(typeof adapter.lookup).toBe("function");
   });
 
+  it("creates the browser client in assisted mode", async () => {
+    const adapter = new ReceitaConsultaOptantesAdapter();
+
+    await adapter.lookup("12345678000195");
+
+    expect(ReceitaBrowserClientMock).toHaveBeenCalledWith({
+      headless: false,
+    });
+  });
+
   it("calls browser lifecycle methods in correct order", async () => {
     const adapter = new ReceitaConsultaOptantesAdapter();
 
@@ -193,6 +203,20 @@ describe("ReceitaConsultaOptantesAdapter", () => {
 
     expect(result.status).toBe("TEMPORARY_ERROR");
     expect(result.message).toBe("Timeout waiting");
+  });
+
+  it("returns CANCELLED when browser flow aborts with AbortError", async () => {
+    mockClient.connect.mockRejectedValue(
+      new DOMException("Aborted", "AbortError"),
+    );
+
+    const adapter = new ReceitaConsultaOptantesAdapter();
+
+    const result = await adapter.lookup("12345678000195");
+
+    expect(result.status).toBe("CANCELLED");
+    expect(result.source).toBe("system");
+    expect(result.message).toContain("cancelado");
   });
 
   it("uses abort signal in all browser calls", async () => {

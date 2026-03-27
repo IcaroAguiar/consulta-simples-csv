@@ -24,7 +24,15 @@ export function formatDuration(durationInMs: number): string {
 }
 
 export function formatProviderMode(provider: SimplesProviderName): string {
-  return provider === "cnpja-open" ? "CNPJá Open live" : "Mock local";
+  if (provider === "cnpja-open") {
+    return "CNPJá Open live";
+  }
+
+  if (provider === "receita-web") {
+    return "Receita assistida (experimental)";
+  }
+
+  return "Mock local";
 }
 
 export function formatCommandBarSummary(

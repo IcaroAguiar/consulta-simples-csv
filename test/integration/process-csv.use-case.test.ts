@@ -2,6 +2,30 @@ import { describe, expect, it } from "vitest";
 
 import { processCsv } from "../../src/core/app/process-csv.use-case";
 import { MockSimplesLookupAdapter } from "../../src/core/simples/adapters/mock-simples-lookup.adapter";
+import type {
+  SimplesLookupOptions,
+  SimplesLookupPort,
+} from "../../src/core/simples/simples-lookup.port";
+import type { SimplesLookupResult } from "../../src/core/simples/simples-lookup.types";
+
+class ErrorStatusLookupAdapter implements SimplesLookupPort {
+  constructor(
+    private readonly responseByCnpj: Record<string, SimplesLookupResult>,
+  ) {}
+
+  async lookup(
+    cnpj: string,
+    _options?: SimplesLookupOptions,
+  ): Promise<SimplesLookupResult> {
+    const response = this.responseByCnpj[cnpj];
+
+    if (!response) {
+      throw new Error(`Missing fixture for ${cnpj}`);
+    }
+
+    return response;
+  }
+}
 
 describe("processCsv", () => {
   it("enriches rows, reuses duplicate lookups, and preserves original columns", async () => {
@@ -100,5 +124,48 @@ describe("processCsv", () => {
     );
     expect(result.outputCsv).toContain(";mock;;4");
     expect(result.outputCsv).toContain(";mock;;5");
+  });
+
+  it("counts receita-web blocking and parsing statuses as errors in the summary", async () => {
+    const csv = [
+      "nome;cpf_cnpj",
+      "Empresa A;11.222.333/0001-81",
+      "Empresa B;03.426.484/0001-23",
+      "Empresa C;61.741.631/0001-56",
+    ].join("\n");
+
+    const provider = new ErrorStatusLookupAdapter({
+      "11222333000181": {
+        cnpj: "11222333000181",
+        simplesNacional: null,
+        simei: null,
+        source: "receita-web",
+        status: "BLOCKED",
+        message: "Bloqueado pelo portal",
+      },
+      "03426484000123": {
+        cnpj: "03426484000123",
+        simplesNacional: null,
+        simei: null,
+        source: "receita-web",
+        status: "CAPTCHA_REQUIRED",
+        message: "CAPTCHA detectado",
+      },
+      "61741631000156": {
+        cnpj: "61741631000156",
+        simplesNacional: null,
+        simei: null,
+        source: "receita-web",
+        status: "UNPARSABLE_RESULT",
+        message: "Resposta não reconhecida",
+      },
+    });
+
+    const result = await processCsv(csv, provider);
+
+    expect(result.summary.totalErros).toBe(3);
+    expect(result.outputCsv).toContain("BLOCKED");
+    expect(result.outputCsv).toContain("CAPTCHA_REQUIRED");
+    expect(result.outputCsv).toContain("UNPARSABLE_RESULT");
   });
 });

@@ -30,6 +30,7 @@ type ProcessCsvResult = {
 
 type AppDefaults = {
   provider: SimplesProviderName;
+  receitaWebAvailable: boolean;
 };
 
 contextBridge.exposeInMainWorld("appBridge", {

@@ -19,6 +19,9 @@ describe("renderer operational copy", () => {
   it("formats the provider mode label", () => {
     expect(formatProviderMode("mock")).toBe("Mock local");
     expect(formatProviderMode("cnpja-open")).toBe("CNPJá Open live");
+    expect(formatProviderMode("receita-web")).toBe(
+      "Receita assistida (experimental)",
+    );
   });
 
   it("formats the command bar summary with file and provider", () => {
@@ -27,6 +30,9 @@ describe("renderer operational copy", () => {
     );
     expect(formatCommandBarSummary(null, "cnpja-open")).toBe(
       "Nenhum CSV carregado • CNPJá Open live",
+    );
+    expect(formatCommandBarSummary("clientes.csv", "receita-web")).toBe(
+      "clientes.csv • Receita assistida (experimental)",
     );
   });
 
