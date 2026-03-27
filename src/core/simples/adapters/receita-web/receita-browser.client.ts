@@ -1,6 +1,7 @@
 import type { Browser, BrowserContext, Page } from "playwright";
 import { chromium } from "playwright";
 import { RECEITA_SELECTORS } from "./receita.selectors.js";
+import { resolvePackagedWindowsBrowserPath } from "./receita-browser-path.js";
 
 export type ReceitaBrowserClientOptions = {
   timeout?: number;
@@ -68,13 +69,16 @@ export class ReceitaBrowserClient {
   async connect(signal?: AbortSignal): Promise<void> {
     throwIfAborted(signal);
 
+    const executablePath =
+      this.executablePath ?? resolvePackagedWindowsBrowserPath();
+
     const launchOptions: Parameters<typeof chromium.launch>[0] = {
       headless: this.headless,
       args: ["--disable-blink-features=AutomationControlled"],
     };
 
-    if (this.executablePath) {
-      launchOptions.executablePath = this.executablePath;
+    if (executablePath) {
+      launchOptions.executablePath = executablePath;
     }
 
     let browser: Browser | null = null;

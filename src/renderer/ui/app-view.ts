@@ -106,7 +106,7 @@ export function renderShell(state: UiState): string {
               </select>
               ${
                 state.provider === "receita-web"
-                  ? '<span class="field__hint">Abre navegador visível, pode ser bloqueado por proteção anti-robô e exige supervisão humana em lotes grandes.</span>'
+                  ? '<span class="field__hint">Abre navegador visível, pode ser bloqueado por proteção anti-robô, exige supervisão humana em lotes grandes e no Windows depende de Chrome ou Edge instalados.</span>'
                   : ""
               }
             </label>
@@ -166,7 +166,7 @@ export function renderShell(state: UiState): string {
             </div>
             <div class="info-item">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 4v6c0 5-3.5 8-8 8s-8-3-8-8V7l8-4z"/><path d="M9 12l2 2 4-4"/></svg>
-              <strong>receita-web</strong> é assistido e experimental: funciona melhor com navegador visível e não deve ser tratado como automação sólida.
+              <strong>receita-web</strong> é assistido e experimental: funciona melhor com navegador visível, no Windows usa Chrome ou Edge instalados e não deve ser tratado como automação sólida.
             </div>
             <div class="info-item">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>

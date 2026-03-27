@@ -87,6 +87,21 @@ export class ReceitaConsultaOptantesAdapter implements SimplesLookupPort {
         };
       }
 
+      if (
+        error instanceof Error &&
+        error.message.includes("Executable doesn't exist")
+      ) {
+        return {
+          cnpj,
+          simplesNacional: null,
+          simei: null,
+          source: "receita-web",
+          status: "TEMPORARY_ERROR",
+          message:
+            "Não foi possível abrir o navegador assistido. Instale Google Chrome ou Microsoft Edge nesta máquina e tente novamente.",
+        };
+      }
+
       throw error;
     } finally {
       await client.disconnect();

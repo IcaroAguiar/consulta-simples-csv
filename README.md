@@ -10,7 +10,7 @@ O projeto foi desenhado para funcionar localmente, com baixo atrito para o usuá
 - detecta ou aceita configuração da coluna de CNPJ
 - normaliza e valida os documentos
 - remove consultas duplicadas na mesma execução
-- consulta `mock` ou `cnpja-open`
+- consulta `mock`, `cnpja-open` ou `receita-web`
 - exporta um novo CSV com colunas de resultado
 - mostra progresso, ETA, auto-save e resumo operacional
 
@@ -65,6 +65,17 @@ Observações importantes:
 - a consulta em lote é funcional, mas não rápida
 - este provider deve ser tratado como provider inicial de validação, não como provider final de produção
 
+### `receita-web`
+
+Automação assistida do portal oficial da Receita para a Consulta Optantes.
+
+Observações importantes:
+
+- é uma funcionalidade experimental
+- abre navegador visível e exige supervisão humana
+- pode ser bloqueada pela proteção anti-robô do portal
+- na release Windows, depende de Google Chrome ou Microsoft Edge instalados na máquina
+
 ## Stack
 
 - `Electron`
@@ -96,10 +107,16 @@ Build local de validação no macOS:
 pnpm dist:mac
 ```
 
-Build Windows local:
+Build Windows local `x64`:
 
 ```bash
 pnpm dist:win
+```
+
+Build Windows local `arm64`:
+
+```bash
+pnpm dist:win:arm64
 ```
 
 Build Windows via GitHub Actions:

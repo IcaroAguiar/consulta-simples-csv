@@ -1,15 +1,6 @@
 import path from "node:path";
 import { app, BrowserWindow, dialog } from "electron";
 
-function setupPlaywrightBrowserPath(): void {
-  if (app.isPackaged) {
-    const browserPath = path.join(path.dirname(app.getAppPath()), "browsers");
-    process.env.PLAYWRIGHT_BROWSERS_PATH = browserPath;
-  }
-}
-
-setupPlaywrightBrowserPath();
-
 import { closeWindowAfterCancellation } from "./close-after-cancel";
 import {
   hasActiveProcessing,
