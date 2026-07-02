@@ -193,4 +193,5 @@ jobs:
       - name: Show release URL
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release view "$TAG" --json url,assets --jq '{url, assets: [.assets[].name]}'
+        run: |
+          gh release view "$TAG" --json url,assets --jq '{url, assets: [.assets[].name]}'
