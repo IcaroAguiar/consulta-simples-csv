@@ -1,0 +1,196 @@
+name: Publish release assets
+run-name: Publish release assets - ${{ inputs.tag }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: "Successful Desktop unsigned builds run ID"
+        required: true
+        type: string
+      verification_run_id:
+        description: "Successful Release artifact verification run ID"
+        required: true
+        type: string
+      target_sha:
+        description: "Commit SHA expected for the release"
+        required: true
+        type: string
+      version:
+        description: "Package version, without v prefix"
+        required: true
+        type: string
+      tag:
+        description: "Release tag, for example v0.1.3"
+        required: true
+        type: string
+      latest:
+        description: "Mark release as latest"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: publish-release-assets-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish-release-assets:
+    name: Publish verified assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      BUILD_RUN_ID: ${{ inputs.build_run_id }}
+      VERIFICATION_RUN_ID: ${{ inputs.verification_run_id }}
+      TARGET_SHA: ${{ inputs.target_sha }}
+      VERSION: ${{ inputs.version }}
+      TAG: ${{ inputs.tag }}
+
+    steps:
+      - name: Checkout workflow commit
+        uses: actions/checkout@v4
+
+      - name: Verify source runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          build_metadata="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${BUILD_RUN_ID}" --jq '[.head_sha, .status, (.conclusion // "")] | @tsv')"
+          IFS=$'\t' read -r build_sha build_status build_conclusion <<< "$build_metadata"
+
+          if [ "$build_sha" != "$TARGET_SHA" ]; then
+            echo "::error::Build run ${BUILD_RUN_ID} was produced from ${build_sha}, not ${TARGET_SHA}."
+            exit 1
+          fi
+
+          if [ "$build_status" != "completed" ] || [ "$build_conclusion" != "success" ]; then
+            echo "::error::Build run ${BUILD_RUN_ID} is ${build_status}/${build_conclusion}, not completed/success."
+            exit 1
+          fi
+
+          verification_metadata="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${VERIFICATION_RUN_ID}" --jq '[.head_sha, .status, (.conclusion // "")] | @tsv')"
+          IFS=$'\t' read -r verification_sha verification_status verification_conclusion <<< "$verification_metadata"
+
+          if [ "$verification_sha" != "$TARGET_SHA" ]; then
+            echo "::error::Verification run ${VERIFICATION_RUN_ID} was produced from ${verification_sha}, not ${TARGET_SHA}."
+            exit 1
+          fi
+
+          if [ "$verification_status" != "completed" ] || [ "$verification_conclusion" != "success" ]; then
+            echo "::error::Verification run ${VERIFICATION_RUN_ID} is ${verification_status}/${verification_conclusion}, not completed/success."
+            exit 1
+          fi
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: fiscal-desk-windows-x64
+          path: release-artifacts/fiscal-desk-windows-x64
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.build_run_id }}
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: fiscal-desk-macos
+          path: release-artifacts/fiscal-desk-macos
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.build_run_id }}
+
+      - name: Download verification receipt
+        uses: actions/download-artifact@v4
+        with:
+          name: release-verification-${{ inputs.version }}
+          path: release-verification
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.verification_run_id }}
+
+      - name: Validate release receipt
+        run: |
+          set -euo pipefail
+
+          test -f release-verification/release-manifest.json
+          test -f release-verification/SHA256SUMS.txt
+
+          jq -e \
+            --arg version "$VERSION" \
+            --arg targetSha "$TARGET_SHA" \
+            --arg tag "$TAG" \
+            --arg buildRunId "$BUILD_RUN_ID" \
+            '.package.version == $version
+              and .source.expectedSha == $targetSha
+              and .source.tag == $tag
+              and .source.artifactRunId == $buildRunId
+              and .validation.status == "pass"
+              and .distribution.signed == false
+              and .distribution.notarized == false
+              and .distribution.autoUpdater == false' \
+            release-verification/release-manifest.json
+
+          find release-artifacts release-verification -maxdepth 3 -type f -print | sort
+
+      - name: Create release notes
+        run: |
+          cat > release-notes.md <<EOF
+          Fiscal Desk ${TAG}
+
+          Unsigned desktop builds for Windows x64 and macOS.
+
+          Validation:
+          - Commit: ${TARGET_SHA}
+          - Build run: ${BUILD_RUN_ID}
+          - Verification run: ${VERIFICATION_RUN_ID}
+          - Manifest: release-manifest.json
+          - Checksums: SHA256SUMS.txt
+
+          Distribution limits:
+          - Windows build is unsigned.
+          - macOS build is unsigned and not notarized.
+          - Auto-updater is not enabled.
+          EOF
+
+      - name: Publish GitHub Release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          mapfile -t assets < <(
+            find release-artifacts/fiscal-desk-windows-x64 release-artifacts/fiscal-desk-macos release-verification \
+              -maxdepth 1 \
+              -type f \
+              \( -name '*.exe' -o -name '*.dmg' -o -name '*.zip' -o -name '*.yml' -o -name '*.yaml' -o -name '*.blockmap' -o -name 'release-manifest.json' -o -name 'SHA256SUMS.txt' \) \
+              -print | sort
+          )
+
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo "::error::No release assets found."
+            exit 1
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${assets[@]}" --clobber
+          else
+            latest_flag="--latest"
+            if [ "${{ inputs.latest }}" != "true" ]; then
+              latest_flag="--latest=false"
+            fi
+
+            gh release create "$TAG" \
+              --target "$TARGET_SHA" \
+              --title "Fiscal Desk ${TAG}" \
+              --notes-file release-notes.md \
+              "$latest_flag" \
+              "${assets[@]}"
+          fi
+
+      - name: Show release URL
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release view "$TAG" --json url,assets --jq '{url, assets: [.assets[].name]}'
