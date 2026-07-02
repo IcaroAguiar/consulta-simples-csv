@@ -191,6 +191,9 @@ Build unsigned via GitHub Actions:
 - macOS: gera `.dmg` unsigned via `pnpm dist:mac`
 - o workflow apenas sobe artifacts internos; não publica GitHub Release, não
   assina, não notariza e não habilita updater real
+- quando a solicitação for nova versão/build para usuários, esses artifacts
+  precisam ser promovidos para GitHub Release assets; links de Actions não
+  encerram a publicação
 
 ## Testes e validação
 

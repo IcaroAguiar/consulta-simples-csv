@@ -23,6 +23,19 @@ Fora deste corte:
 - deleção remota de tags, releases, assets ou workflow runs;
 - uso de secrets/certificados.
 
+## Regra obrigatória de assets
+
+Quando o owner solicitar nova versão, novo build, build para usuários, release
+ou atualização distribuível, a entrega só termina depois que os binários
+gerados e verificados estiverem anexados como GitHub Release assets da
+versão/tag correspondente.
+
+Artifacts de GitHub Actions não contam como distribuição para usuários. Eles são
+apenas evidência intermediária para verificação e promoção. Se a publicação ou
+atualização dos GitHub Release assets estiver bloqueada, o bloqueio deve ser
+reportado explicitamente e a versão/build não deve ser descrita como
+disponibilizada.
+
 ## Branch protection recomendada
 
 Configure em GitHub UI para `main`:

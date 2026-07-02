@@ -96,6 +96,9 @@ pnpm compare:receita-web <csv-processado> [saida.csv] [--mode sample|errors|all]
 ## Release e remoto
 
 - O workflow `Desktop unsigned builds` gera artifacts Windows/macOS, mas não cria GitHub Release, não assina, não notariza e não habilita updater real.
+- Neste repo, quando o usuário pedir nova versão, novo build, build para usuários, release ou atualização distribuível, `assets` significa os GitHub Release assets da versão/tag correspondente.
+- Uma solicitação de nova versão/build só está concluída quando os binários gerados e verificados estiverem anexados aos GitHub Release assets. Artifacts de GitHub Actions são evidência intermediária, não disponibilidade para usuários.
+- Se não for possível publicar ou atualizar os GitHub Release assets, reporte o bloqueio explicitamente e não declare a versão/build como disponibilizada.
 - Publicar release, criar tag, disparar workflow ou limpar assets remotos são efeitos externos; faça apenas quando o usuário pedir ou confirmar.
 - Antes de push/release, revise o diff atual, verifique arquivos ignorados e evite publicar contexto local ou artifacts gerados.
 
